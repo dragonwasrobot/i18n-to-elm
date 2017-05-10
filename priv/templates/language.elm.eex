@@ -1,0 +1,11 @@
+module <%= module_name %>.<%= file_name %> exposing (<%= translation_name %>)
+
+import <%= module_name %>.Ids exposing (TranslationId(..))
+
+<%= translation_name %> : TranslationId -> String
+<%= translation_name %> tid =
+    case tid of<%#
+    %><%= for {key, value} <- translations do %>
+        <%= key %> ->
+            "<%= value %>"
+<% end %>

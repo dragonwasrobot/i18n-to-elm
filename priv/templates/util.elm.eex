@@ -1,0 +1,40 @@
+module <%= module_name %>.Util exposing (parseLanguage, translate, LanguageTag(..))
+
+import <%= module_name %>.Ids exposing (TranslationId)<%#
+%><%= for import <- imports do %>
+import <%= module_name %>.<%= import.file_name %> exposing (<%= import.translation_name %>)<% end %>
+
+
+type LanguageTag
+    = <%= for {language, idx} <- Enum.with_index(languages) do %><%#
+    %><%= if idx == 0 do %><%#
+    %><%= language.type_value %><%#
+    %><% else %>
+    | <%= language.type_value %><%#
+    %><% end %><%#
+    %><% end %>
+
+parseLanguage : String -> LanguageTag
+parseLanguage tag =
+    case tag of<%#
+    %><%= for language <- languages do %>
+        "<%= language.string_value %>" ->
+            <%= language.type_value %>
+<% end %>
+        _ ->
+            Debug.log
+                ("Unknown language: '" ++ tag ++ "', defaulting to English")
+                EN_US
+
+
+translate : LanguageTag -> TranslationId -> String
+translate languageTag translationId =
+    let
+        translateFun =
+            case languageTag of<%#
+    %><%= for language <- languages do %>
+                <%= language.type_value %> ->
+                    <%= language.translation_fun %>
+<% end %>
+    in
+        translateFun translationId

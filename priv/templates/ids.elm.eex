@@ -1,0 +1,10 @@
+module <%= module_name %>.Ids exposing (TranslationId(..))
+
+type TranslationId
+    = <%= for {id, idx} <- Enum.with_index(ids) do %><%#
+    %><%= if idx == 0 do %><%#
+    %><%= id %><%#
+    %><% else %>
+    | <%= id %><%#
+    %><% end %><%#
+    %><% end %>
