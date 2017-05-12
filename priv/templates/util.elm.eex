@@ -14,6 +14,7 @@ type LanguageTag
     %><% end %><%#
     %><% end %>
 
+
 parseLanguage : String -> LanguageTag
 parseLanguage tag =
     case tag of<%#
@@ -35,6 +36,6 @@ translate languageTag translationId =
     %><%= for language <- languages do %>
                 <%= language.type_value %> ->
                     <%= language.translation_fun %>
-<% end %>
-    in
+<% end %><%#
+%>    in
         translateFun translationId

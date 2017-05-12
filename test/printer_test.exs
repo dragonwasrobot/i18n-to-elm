@@ -23,6 +23,7 @@ defmodule I18n2ElmTest.Printer do
 
     import Translations.Ids exposing (TranslationId(..))
 
+
     daDkTranslations : TranslationId -> String
     daDkTranslations tid =
         case tid of
@@ -73,6 +74,7 @@ defmodule I18n2ElmTest.Printer do
     expected_ids_file = ~S"""
     module Translations.Ids exposing (TranslationId(..))
 
+
     type TranslationId
         = TidNext
         | TidNo
@@ -122,6 +124,7 @@ defmodule I18n2ElmTest.Printer do
         = DA_DK
         | EN_US
 
+
     parseLanguage : String -> LanguageTag
     parseLanguage tag =
         case tag of
@@ -147,7 +150,6 @@ defmodule I18n2ElmTest.Printer do
 
                     EN_US ->
                         enUsTranslations
-
         in
             translateFun translationId
     """

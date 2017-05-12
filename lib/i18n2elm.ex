@@ -107,13 +107,12 @@ defmodule I18n2Elm do
     printed_translations = Printer.print_translations(translations, module_name)
 
     printed_translations
-    # printed_translations
-    # |> Enum.each(fn{file_path, file_content} ->
-    #   {:ok, file} = File.open file_path, [:write]
-    #   IO.binwrite file, file_content
-    #   File.close file
-    #   Logger.info "Created file: #{file_path}"
-    # end)
+    |> Enum.each(fn{file_path, file_content} ->
+      {:ok, file} = File.open file_path, [:write]
+      IO.binwrite file, file_content
+      File.close file
+      Logger.info "Created file: #{file_path}"
+    end)
   end
 
 end
