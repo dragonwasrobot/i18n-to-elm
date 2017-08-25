@@ -1,23 +1,23 @@
 module Translations.Util exposing (parseLanguage, translate, LanguageTag(..))
 
 import Translations.Ids exposing (TranslationId)
-import Translations.EnUs exposing (enUsTranslations)
 import Translations.DaDk exposing (daDkTranslations)
+import Translations.EnUs exposing (enUsTranslations)
 
 
 type LanguageTag
-    = EN_US
-    | DA_DK
+    = DA_DK
+    | EN_US
 
 
 parseLanguage : String -> LanguageTag
 parseLanguage tag =
     case tag of
-        "en_US" ->
-            EN_US
-
         "da_DK" ->
             DA_DK
+
+        "en_US" ->
+            EN_US
 
         _ ->
             Debug.log
@@ -30,10 +30,10 @@ translate languageTag translationId =
     let
         translateFun =
             case languageTag of
-                EN_US ->
-                    enUsTranslations
-
                 DA_DK ->
                     daDkTranslations
+
+                EN_US ->
+                    enUsTranslations
     in
         translateFun translationId

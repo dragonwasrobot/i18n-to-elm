@@ -1,5 +1,7 @@
 defmodule I18n2ElmTest.Parser do
   use ExUnit.Case
+  doctest I18n2Elm.Parser, import: true
+
   alias I18n2Elm.Parser
   alias I18n2Elm.Types.Translation
 
@@ -11,7 +13,8 @@ defmodule I18n2ElmTest.Parser do
         "Yes": "Ja",
         "No": "Nej",
         "Next": "Næste",
-        "Previous": "Forrige"
+        "Previous": "Forrige",
+        "Hello": "Hej, {0}. Leder du efter {1}?"
       }
       """
       |> Poison.decode!()
@@ -20,10 +23,13 @@ defmodule I18n2ElmTest.Parser do
     expected_parsed_translation = %Translation{
       language_tag: "da_DK",
       translations: [
-        {"TidNext", "Næste"},
-        {"TidNo", "Nej"},
-        {"TidPrevious", "Forrige"},
-        {"TidYes", "Ja"}
+        {"TidHello", [{"Hej, ", 0},
+                      {". Leder du efter ", 1},
+                      {"?"}]},
+        {"TidNext", [{"Næste"}]},
+        {"TidNo", [{"Nej"}]},
+        {"TidPrevious", [{"Forrige"}]},
+        {"TidYes", [{"Ja"}]}
       ]
     }
 

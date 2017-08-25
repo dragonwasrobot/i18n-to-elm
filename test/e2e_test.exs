@@ -11,20 +11,26 @@ defmodule I18n2ElmTest.E2E do
       %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidNext", "Næste"},
-          {"TidNo", "Nej"},
-          {"TidPrevious", "Forrige"},
-          {"TidYes", "Ja"}
+          {"TidHello", [{"Hej, ", 1},
+                        {". Leder du efter ", 0},
+                        {"?"}]},
+          {"TidNext", [{"Næste"}]},
+          {"TidNo", [{"Nej"}]},
+          {"TidPrevious", [{"Forrige"}]},
+          {"TidYes", [{"Ja"}]}
         ]
       },
 
       %Translation{
         language_tag: "en_US",
         translations: [
-          {"TidNext", "Next"},
-          {"TidNo", "No"},
-          {"TidPrevious", "Previous"},
-          {"TidYes", "Yes"}
+          {"TidHello", [{"Hello, ", 0},
+                        {"It is ", 1},
+                        {"you are looking for?"}]},
+          {"TidNext", [{"Next"}]},
+          {"TidNo", [{"No"}]},
+          {"TidPrevious", [{"Previous"}]},
+          {"TidYes", [{"Yes"}]}
         ]
       }
     ]

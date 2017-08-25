@@ -4,7 +4,7 @@ defmodule I18n2Elm.Mixfile do
   def project do
     [app: :i18n2elm,
      version: "0.1.0",
-     elixir: "~> 1.4",
+     elixir: "~> 1.5",
      deps: deps(),
      aliases: aliases(),
      build_embedded: Mix.env == :prod,
