@@ -51,7 +51,7 @@ If we supply `i18n2elm` with the folder `examples/input-i18n-json`, containing
 the two JSON files, `da_DK.json`:
 ``` json
 {
-    "Hello": "Hello, {0}. Is it {1} you are looking for?",
+    "Hello": "Hej, {0}. Leder du efter {1}?",
     "Next" : "Næste",
     "No": "Nej",
     "Previous": "Forrige",
@@ -63,6 +63,7 @@ the two JSON files, `da_DK.json`:
 and `en_US.json`:
 ``` json
 {
+    "Hello": "Hello, {0}. Is it {1} you are looking for?",
     "Next" : "Next",
     "No": "No",
     "Previous": "Previous",
