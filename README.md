@@ -34,7 +34,7 @@ json file is a simple dictionary of i18n keys and values, for example:
 
 ``` json
 {
-    "Hello": "Hej, {0}. Leder du efter {1}?"
+    "Hello": "Hej, {0}. Leder du efter {1}?",
     "Next" : "Næste",
     "No": "Nej",
     "Previous": "Forrige",
@@ -51,7 +51,7 @@ If we supply `i18n2elm` with the folder `examples/input-i18n-json`, containing
 the two JSON files, `da_DK.json`:
 ``` json
 {
-    "Hello": "Hello, {0}. Is it {1} you are looking for?"
+    "Hello": "Hello, {0}. Is it {1} you are looking for?",
     "Next" : "Næste",
     "No": "Nej",
     "Previous": "Forrige",
