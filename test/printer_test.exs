@@ -1,6 +1,7 @@
 defmodule I18n2ElmTest.Printer do
-
   use ExUnit.Case
+  doctest I18n2Elm.Printer, import: true
+
   alias I18n2Elm.Printer
   alias I18n2Elm.Types.Translation
 
@@ -10,10 +11,13 @@ defmodule I18n2ElmTest.Printer do
       %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidNext", "Næste"},
-          {"TidNo", "Nej"},
-          {"TidPrevious", "Forrige"},
-          {"TidYes", "Ja"}
+          {"TidHello", [{"Hej, ", 1},
+                        {". Leder du efter ", 0},
+                        {"?"}]},
+          {"TidNext", [{"Næste"}]},
+          {"TidNo", [{"Nej"}]},
+          {"TidPrevious", [{"Forrige"}]},
+          {"TidYes", [{"Ja"}]}
         ]
       }
       |> Printer.print_translation("Translations")
@@ -27,6 +31,9 @@ defmodule I18n2ElmTest.Printer do
     daDkTranslations : TranslationId -> String
     daDkTranslations tid =
         case tid of
+            TidHello hole0 hole1 ->
+                "Hej, " ++ hole1 ++ ". Leder du efter " ++ hole0 ++ "?"
+
             TidNext ->
                 "Næste"
 
@@ -38,7 +45,6 @@ defmodule I18n2ElmTest.Printer do
 
             TidYes ->
                 "Ja"
-
     """
 
     assert translations_file_path == "./Translations/DaDk.elm"
@@ -51,20 +57,26 @@ defmodule I18n2ElmTest.Printer do
       %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidNext", "Næste"},
-          {"TidNo", "Nej"},
-          {"TidPrevious", "Forrige"},
-          {"TidYes", "Ja"}
+          {"TidHello", [{"Hej, ", 0},
+                        {". Leder du efter ", 1},
+                        {"?"}]},
+          {"TidNext", [{"Næste"}]},
+          {"TidNo", [{"Nej"}]},
+          {"TidPrevious", [{"Forrige"}]},
+          {"TidYes", [{"Ja"}]}
         ]
       },
 
       %Translation{
         language_tag: "en_US",
         translations: [
-          {"TidNext", "Next"},
-          {"TidNo", "No"},
-          {"TidPrevious", "Previous"},
-          {"TidYes", "Yes"}
+          {"TidHello", [{"Hello, ", 0},
+                        {"It is ", 1},
+                        {"you are looking for?"}]},
+          {"TidNext", [{"Next"}]},
+          {"TidNo", [{"No"}]},
+          {"TidPrevious", [{"Previous"}]},
+          {"TidYes", [{"Yes"}]}
         ]
       }
     ]
@@ -76,7 +88,8 @@ defmodule I18n2ElmTest.Printer do
 
 
     type TranslationId
-        = TidNext
+        = TidHello String String
+        | TidNext
         | TidNo
         | TidPrevious
         | TidYes
@@ -92,20 +105,26 @@ defmodule I18n2ElmTest.Printer do
       %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidNext", "Næste"},
-          {"TidNo", "Nej"},
-          {"TidPrevious", "Forrige"},
-          {"TidYes", "Ja"}
+          {"TidHello", [{"Hej, ", 0},
+                        {". Leder du efter ", 1},
+                        {"?"}]},
+          {"TidNext", [{"Næste"}]},
+          {"TidNo", [{"Nej"}]},
+          {"TidPrevious", [{"Forrige"}]},
+          {"TidYes", [{"Ja"}]}
         ]
       },
 
       %Translation{
         language_tag: "en_US",
         translations: [
-          {"TidNext", "Next"},
-          {"TidNo", "No"},
-          {"TidPrevious", "Previous"},
-          {"TidYes", "Yes"}
+          {"TidHello", [{"Hello, ", 0},
+                        {"It is ", 1},
+                        {"you are looking for?"}]},
+          {"TidNext", [{"Next"}]},
+          {"TidNo", [{"No"}]},
+          {"TidPrevious", [{"Previous"}]},
+          {"TidYes", [{"Yes"}]}
         ]
       }
     ]

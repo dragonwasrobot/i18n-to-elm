@@ -35,19 +35,78 @@ defmodule I18n2Elm.Printer do
     printed_translations ++ [printed_ids] ++ [printed_util]
   end
 
+  @doc ~S"""
+  Create translation keys and values
+
+  """
   @spec print_translation(%Translation{}, String.t) :: {String.t, String.t}
   def print_translation(translation, module_name \\ "") do
 
     file_name = create_file_name(translation)
     file_path = create_file_path(file_name, module_name)
     translation_name = create_translation_name(translation)
-    translations = translation.translations
+    translations =
+      translation.translations
+      |> Enum.map(&create_translation_pair/1)
 
     translation_file =
       language_template(module_name, file_name, translation_name, translations)
 
-    {file_path, translation_file}
+    {file_path, String.trim(translation_file) <> "\n"}
   end
+
+  @doc ~S"""
+  Creates a translation {key, value} pair:
+
+      ## Examples
+
+      iex> translation = {"TidHello", [{"Hej, ", 1},
+      ...>                             {". Leder du efter ", 0},
+      ...>                             {"?"}]}
+      iex> create_translation_pair(translation)
+      {"TidHello hole0 hole1",
+       "\"Hej, \" ++ hole1 ++ \". Leder du efter \" ++ hole0 ++ \"?\""}
+  """
+  @spec create_translation_pair(
+    {String.t, [{String.t, integer} | {String.t}]}
+  ) :: {String.t, String.t}
+  defp create_translation_pair({translation_id, translation}) do
+    arguments = create_translation_arguments(translation)
+
+    key = if String.length(arguments) > 0 do
+      "#{translation_id} #{arguments}"
+    else
+      translation_id
+    end
+
+    value = create_translation_value(translation)
+
+    {key, value}
+  end
+
+  defp create_translation_arguments(translation) do
+    translation
+    |> Enum.filter(&two_tuple?/1)
+    |> Enum.sort(fn ({_t1, hole1}, {_t2, hole2}) -> hole1 < hole2 end)
+    |> Enum.map(fn {_text, hole_number} -> hole_number end)
+    |> Enum.map_join(" ", fn hole_number -> "hole#{hole_number}" end)
+  end
+
+  defp two_tuple?({_left, _right}), do: true
+  defp two_tuple?(_), do: false
+
+  defp create_translation_value(translation) do
+    translation
+    |> Enum.map(&quote_translation/1)
+    |> Enum.map(&Tuple.to_list/1)
+    |> List.flatten
+    |> Enum.join(" ++ ")
+  end
+
+  defp quote_translation({text, hole_number}) do
+    {"\"#{text}\"", "hole#{hole_number}"}
+  end
+  defp quote_translation({text}), do: {"\"#{text}\""}
 
   @spec print_ids([Translation.t], String.t) :: {String.t, String.t}
   def print_ids(translations, module_name \\ "") do
@@ -60,7 +119,18 @@ defmodule I18n2Elm.Printer do
 
     ids =
       en_us_translation.translations
-      |> Enum.map(fn {id, _value} -> id end)
+      |> Enum.map(fn {translation_id, translation} ->
+
+      arguments = translation
+      |> Enum.filter(&two_tuple?/1)
+      |> Enum.map_join(" ", fn _ -> "String" end)
+
+      if String.length(arguments) > 0 do
+        "#{translation_id} #{arguments}"
+      else
+        translation_id
+      end
+    end)
 
     ids_file =
       ids_template(module_name, ids)
@@ -75,6 +145,7 @@ defmodule I18n2Elm.Printer do
 
     imports =
       translations
+      |> Enum.sort(&by_language_tag/2)
       |> Enum.map(fn translation ->
       %{file_name: create_file_name(translation),
         translation_name: create_translation_name(translation)}
@@ -82,6 +153,7 @@ defmodule I18n2Elm.Printer do
 
     languages =
         translations
+        |> Enum.sort(&by_language_tag/2)
         |> Enum.map(fn translation ->
       %{string_value: translation.language_tag,
         type_value: String.upcase(translation.language_tag),
@@ -92,6 +164,8 @@ defmodule I18n2Elm.Printer do
 
     {file_path, util_file}
   end
+
+  defp by_language_tag(t1, t2), do: t1.language_tag <= t2.language_tag
 
   @spec create_file_path(String.t, String.t) :: String.t
   defp create_file_path(file_name, module_name) do

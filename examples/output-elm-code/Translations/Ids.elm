@@ -2,7 +2,8 @@ module Translations.Ids exposing (TranslationId(..))
 
 
 type TranslationId
-    = TidNext
+    = TidHello String String
+    | TidNext
     | TidNo
     | TidPrevious
     | TidYes

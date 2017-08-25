@@ -34,6 +34,7 @@ json file is a simple dictionary of i18n keys and values, for example:
 
 ``` json
 {
+    "Hello": "Hej, {0}. Leder du efter {1}?"
     "Next" : "Næste",
     "No": "Nej",
     "Previous": "Forrige",
@@ -50,6 +51,7 @@ If we supply `i18n2elm` with the folder `examples/input-i18n-json`, containing
 the two JSON files, `da_DK.json`:
 ``` json
 {
+    "Hello": "Hello, {0}. Is it {1} you are looking for?"
     "Next" : "Næste",
     "No": "Nej",
     "Previous": "Forrige",
@@ -79,6 +81,9 @@ import Translations.Ids exposing (TranslationId(..))
 daDkTranslations : TranslationId -> String
 daDkTranslations tid =
     case tid of
+        TidHello hole0 hole1 ->
+            "Hej, " ++ hole0 ++ ". Leder du efter " ++ hole1 ++ "?"
+
         TidNext ->
             "Næste"
 
@@ -103,6 +108,9 @@ import Translations.Ids exposing (TranslationId(..))
 enUsTranslations : TranslationId -> String
 enUsTranslations tid =
     case tid of
+        TidHello hole0 hole1 ->
+            "Hello, " ++ hole0 ++ ". Is it " ++ hole1 ++ " you are looking for?"
+
         TidNext ->
             "Next"
 
@@ -123,7 +131,8 @@ module Translations.Ids exposing (TranslationId(..))
 
 
 type TranslationId
-    = TidNext
+    = TidHello String String
+    | TidNext
     | TidNo
     | TidPrevious
     | TidYes
@@ -135,23 +144,23 @@ and finally `Translations/Util.elm`:
 module Translations.Util exposing (parseLanguage, translate, LanguageTag(..))
 
 import Translations.Ids exposing (TranslationId)
-import Translations.EnUs exposing (enUsTranslations)
 import Translations.DaDk exposing (daDkTranslations)
+import Translations.EnUs exposing (enUsTranslations)
 
 
 type LanguageTag
-    = EN_US
-    | DA_DK
+    = DA_DK
+    | EN_US
 
 
 parseLanguage : String -> LanguageTag
 parseLanguage tag =
     case tag of
-        "en_US" ->
-            EN_US
-
         "da_DK" ->
             DA_DK
+
+        "en_US" ->
+            EN_US
 
         _ ->
             Debug.log
@@ -164,11 +173,11 @@ translate languageTag translationId =
     let
         translateFun =
             case languageTag of
-                EN_US ->
-                    enUsTranslations
-
                 DA_DK ->
                     daDkTranslations
+
+                EN_US ->
+                    enUsTranslations
     in
         translateFun translationId
 ```

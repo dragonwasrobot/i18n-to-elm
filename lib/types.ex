@@ -15,17 +15,21 @@ defmodule I18n2Elm.Types do
             "Yes": "Ja",
             "No": "Nej",
             "Next": "Næste",
-            "Previous": "Forrige"
+            "Previous": "Forrige",
+            "Hello": "Hej, {0}. Leder du efter {1}?"
         }
 
     Elixir representation:
 
         %Translation{language_tag: "da_DK",
                      translations: [
-                         {"Yes", "Ja"},
-                         {"No", "Nej"},
-                         {"Next", "Næste"},
-                         {"Previous", "Forrige"}
+                         {"TidHello", [{"Hej, ", 0},
+                                       {". Leder du efter ", 1},
+                                       {"?"}]},
+                         {"TidNext", [{"Næste"}]},
+                         {"TidNo", [{"Nej"}]},
+                         {"TidPrevious", [{"Forrige"}]}
+                         {"TidYes", [{"Ja"}]},
                      ]}
 
     Elm code generated:
@@ -37,6 +41,9 @@ defmodule I18n2Elm.Types do
     daDkTranslations : TranslationId -> String
     daDkTranslations tid =
         case tid of
+            TidHello hole0 hole1 ->
+                "Hej, " ++ hole0 ++ ". Leder du efter " ++ hole1 ++ "?"
+
             TidYes ->
                 "Ja"
 

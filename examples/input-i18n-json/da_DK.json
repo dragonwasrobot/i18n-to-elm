@@ -2,5 +2,6 @@
     "Next" : "Næste",
     "No": "Nej",
     "Previous": "Forrige",
-    "Yes": "Ja"
+    "Yes": "Ja",
+    "Hello": "Hej, {0}. Leder du efter {1}?"
 }
