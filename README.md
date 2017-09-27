@@ -1,16 +1,14 @@
 # i18n to Elm
 
-> Note: This project is very much a work in progress, so use with caution.
-
-> Also: If you like code that generates code, you might
-> like [my other project](https://github.com/dragonwasrobot/json-schema-to-elm)
-> which turns JSON-schema specs into Elm types+decoders+encoders.
-
 Generates Elm types and functions from i18n key/value JSON files.
 
 The tool is meant as an aid if you are using a centralized service to handle the
 translation of your i18n resources but then need to import the i18n keys/values
 into your Elm application in a type-safe way.
+
+> Note: If you like code that generates code, you might
+> like [my other project](https://github.com/dragonwasrobot/json-schema-to-elm)
+> which turns JSON-schema specs into Elm types+decoders+encoders.
 
 ## Installation
 
