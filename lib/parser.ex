@@ -7,19 +7,19 @@ defmodule I18n2Elm.Parser do
   require Logger
   alias I18n2Elm.Types.Translation
 
-  @spec parse_translation_files([String.t]) :: [Translation.t]
+  @spec parse_translation_files([String.t()]) :: [Translation.t()]
   def parse_translation_files(translation_file_paths) do
     translation_file_paths
-    |> Enum.map(&(parse_translation_file(&1)))
+    |> Enum.map(&parse_translation_file(&1))
   end
 
-  @spec parse_translation_file(String.t) :: Translation.t
+  @spec parse_translation_file(String.t()) :: Translation.t()
   def parse_translation_file(translation_file_path) do
     language_tag = Path.basename(translation_file_path, ".json")
 
     translation_file_path
-    |> File.read!
-    |> Poison.decode!
+    |> File.read!()
+    |> Poison.decode!()
     |> parse_translation(language_tag)
   end
 
@@ -46,12 +46,12 @@ defmodule I18n2Elm.Parser do
               {"TidYes", [{"Ja"}]}
       ]}
   """
-  @spec parse_translation(map, String.t) :: Translation.t
+  @spec parse_translation(map, String.t()) :: Translation.t()
   def parse_translation(translation_node, language_tag) do
     translations =
       translation_node
-      |> Enum.to_list
-      |> Enum.sort
+      |> Enum.to_list()
+      |> Enum.sort()
       |> Enum.map(&check_for_holes/1)
       |> Enum.map(fn {key, value} -> {"Tid#{key}", value} end)
 
@@ -73,13 +73,12 @@ defmodule I18n2Elm.Parser do
 
   defp group(lst), do: lst |> Enum.chunk_every(2)
 
-  defp tuplify(lst), do: lst |> List.to_tuple
+  defp tuplify(lst), do: lst |> List.to_tuple()
 
   defp hole_to_number({text, hole}) do
     {text}
-    |> Tuple.append(hole |> Integer.parse |> elem(0))
+    |> Tuple.append(hole |> Integer.parse() |> elem(0))
   end
+
   defp hole_to_number({text}), do: {text}
-
-
 end

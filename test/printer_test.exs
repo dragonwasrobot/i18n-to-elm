@@ -6,14 +6,11 @@ defmodule I18n2ElmTest.Printer do
   alias I18n2Elm.Types.Translation
 
   test "print language translation file" do
-
     {translations_file_path, translations_file} =
       %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidHello", [{"Hej, ", 1},
-                        {". Leder du efter ", 0},
-                        {"?"}]},
+          {"TidHello", [{"Hej, ", 1}, {". Leder du efter ", 0}, {"?"}]},
           {"TidNext", [{"Næste"}]},
           {"TidNo", [{"Nej"}]},
           {"TidPrevious", [{"Forrige"}]},
@@ -52,27 +49,21 @@ defmodule I18n2ElmTest.Printer do
   end
 
   test "print ids file" do
-
     translations = [
       %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidHello", [{"Hej, ", 0},
-                        {". Leder du efter ", 1},
-                        {"?"}]},
+          {"TidHello", [{"Hej, ", 0}, {". Leder du efter ", 1}, {"?"}]},
           {"TidNext", [{"Næste"}]},
           {"TidNo", [{"Nej"}]},
           {"TidPrevious", [{"Forrige"}]},
           {"TidYes", [{"Ja"}]}
         ]
       },
-
       %Translation{
         language_tag: "en_US",
         translations: [
-          {"TidHello", [{"Hello, ", 0},
-                        {"It is ", 1},
-                        {"you are looking for?"}]},
+          {"TidHello", [{"Hello, ", 0}, {"It is ", 1}, {"you are looking for?"}]},
           {"TidNext", [{"Next"}]},
           {"TidNo", [{"No"}]},
           {"TidPrevious", [{"Previous"}]},
@@ -100,27 +91,21 @@ defmodule I18n2ElmTest.Printer do
   end
 
   test "prints util file" do
-
     translations = [
       %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidHello", [{"Hej, ", 0},
-                        {". Leder du efter ", 1},
-                        {"?"}]},
+          {"TidHello", [{"Hej, ", 0}, {". Leder du efter ", 1}, {"?"}]},
           {"TidNext", [{"Næste"}]},
           {"TidNo", [{"Nej"}]},
           {"TidPrevious", [{"Forrige"}]},
           {"TidYes", [{"Ja"}]}
         ]
       },
-
       %Translation{
         language_tag: "en_US",
         translations: [
-          {"TidHello", [{"Hello, ", 0},
-                        {"It is ", 1},
-                        {"you are looking for?"}]},
+          {"TidHello", [{"Hello, ", 0}, {"It is ", 1}, {"you are looking for?"}]},
           {"TidNext", [{"Next"}]},
           {"TidNo", [{"No"}]},
           {"TidPrevious", [{"Previous"}]},
@@ -176,5 +161,4 @@ defmodule I18n2ElmTest.Printer do
     assert util_file_path == "./Translations/Util.elm"
     assert util_file == expected_util_file
   end
-
 end

@@ -6,7 +6,6 @@ defmodule I18n2ElmTest.Parser do
   alias I18n2Elm.Types.Translation
 
   test "parse daDk.json file" do
-
     parsed_translation =
       ~S"""
       {
@@ -23,9 +22,7 @@ defmodule I18n2ElmTest.Parser do
     expected_parsed_translation = %Translation{
       language_tag: "da_DK",
       translations: [
-        {"TidHello", [{"Hej, ", 0},
-                      {". Leder du efter ", 1},
-                      {"?"}]},
+        {"TidHello", [{"Hej, ", 0}, {". Leder du efter ", 1}, {"?"}]},
         {"TidNext", [{"Næste"}]},
         {"TidNo", [{"Nej"}]},
         {"TidPrevious", [{"Forrige"}]},
@@ -35,5 +32,4 @@ defmodule I18n2ElmTest.Parser do
 
     assert parsed_translation == expected_parsed_translation
   end
-
 end

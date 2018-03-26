@@ -57,16 +57,13 @@ defmodule I18n2Elm.Types do
                 "Forrige"
     """
 
-    @type t :: %__MODULE__{language_tag: String.t,
-                           translations: [{String.t, String.t}]}
+    @type t :: %__MODULE__{language_tag: String.t(), translations: [{String.t(), String.t()}]}
     defstruct [:language_tag, :translations]
 
-    @spec new(String.t, [{String.t, String.t}]) :: t
+    @spec new(String.t(), [{String.t(), String.t()}]) :: t
     def new(language_tag, translations) do
-      %__MODULE__{language_tag: language_tag,
-                  translations: translations}
+      %__MODULE__{language_tag: language_tag, translations: translations}
     end
-
   end
 
   defmodule LanguageResource do
@@ -74,18 +71,22 @@ defmodule I18n2Elm.Types do
     Represents a translation file for a single language.
     """
 
-    @type t :: %__MODULE__{module_name: String.t,
-                           file_name: String.t,
-                           translation_name: String.t,
-                           translations: [{String.t, String.t}]}
+    @type t :: %__MODULE__{
+            module_name: String.t(),
+            file_name: String.t(),
+            translation_name: String.t(),
+            translations: [{String.t(), String.t()}]
+          }
     defstruct [:module_name, :file_name, :translation_name, :translations]
 
-    @spec new(String.t, String.t, String.t, [{String.t, String.t}]) :: t
+    @spec new(String.t(), String.t(), String.t(), [{String.t(), String.t()}]) :: t
     def new(module_name, file_name, translation_name, translations) do
-      %__MODULE__{module_name: module_name,
-                  file_name: file_name,
-                  translation_name: translation_name,
-                  translations: translations}
+      %__MODULE__{
+        module_name: module_name,
+        file_name: file_name,
+        translation_name: translation_name,
+        translations: translations
+      }
     end
   end
 
@@ -94,14 +95,12 @@ defmodule I18n2Elm.Types do
     Represents a file containing all translation IDs.
     """
 
-    @type t :: %__MODULE__{module_name: String.t,
-                           ids: [String.t]}
+    @type t :: %__MODULE__{module_name: String.t(), ids: [String.t()]}
     defstruct [:module_name, :ids]
 
-    @spec new(String.t, [String.t]) :: t
+    @spec new(String.t(), [String.t()]) :: t
     def new(module_name, ids) do
-      %__MODULE__{module_name: module_name,
-                  ids: ids}
+      %__MODULE__{module_name: module_name, ids: ids}
     end
   end
 
@@ -111,21 +110,18 @@ defmodule I18n2Elm.Types do
     IDs into translated values.
     """
 
-    @type t :: %__MODULE__{module_name: String.t,
-                           imports: [%{file_name: String.t,
-                                       translation_name: String.t}],
-                           languages: [%{string_value: String.t,
-                                         type_value: String.t,
-                                         translation_fun: String.t}]}
+    @type t :: %__MODULE__{
+            module_name: String.t(),
+            imports: [%{file_name: String.t(), translation_name: String.t()}],
+            languages: [
+              %{string_value: String.t(), type_value: String.t(), translation_fun: String.t()}
+            ]
+          }
     defstruct [:module_name, :imports, :languages]
 
-    @spec new(String.t, [map], [map]) :: t
+    @spec new(String.t(), [map], [map]) :: t
     def new(module_name, imports, languages) do
-      %__MODULE__{module_name: module_name,
-                  imports: imports,
-                  languages: languages}
+      %__MODULE__{module_name: module_name, imports: imports, languages: languages}
     end
-
   end
-
 end
