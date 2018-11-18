@@ -2,8 +2,8 @@ defmodule I18n2ElmTest.Printer do
   use ExUnit.Case
   doctest I18n2Elm.Printer, import: true
 
-  alias I18n2Elm.Printer
-  alias I18n2Elm.Types.Translation
+  alias I18n2Elm.{Printer, Types}
+  alias Types.Translation
 
   test "print language translation file" do
     {translations_file_path, translations_file} =

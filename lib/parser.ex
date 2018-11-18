@@ -19,7 +19,7 @@ defmodule I18n2Elm.Parser do
 
     translation_file_path
     |> File.read!()
-    |> Poison.decode!()
+    |> Jason.decode!()
     |> parse_translation(language_tag)
   end
 

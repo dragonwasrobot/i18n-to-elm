@@ -10,7 +10,7 @@ defmodule I18n2Elm.Printer do
   @util_location Path.join(@templates_location, "util.elm.eex")
 
   require Elixir.{EEx, Logger}
-  alias I18n2Elm.Types.{Translation, LanguageResource, IdsResource, UtilResource}
+  alias I18n2Elm.Types.Translation
 
   EEx.function_from_file(:defp, :language_template, @language_location, [
     :module_name,
@@ -58,18 +58,16 @@ defmodule I18n2Elm.Printer do
     {file_path, String.trim(translation_file) <> "\n"}
   end
 
-  @doc ~S"""
-  Creates a translation {key, value} pair:
-
-      ## Examples
-
-      iex> translation = {"TidHello", [{"Hej, ", 1},
-      ...>                             {". Leder du efter ", 0},
-      ...>                             {"?"}]}
-      iex> create_translation_pair(translation)
-      {"TidHello hole0 hole1",
-       "\"Hej, \" ++ hole1 ++ \". Leder du efter \" ++ hole0 ++ \"?\""}
-  """
+  # Creates a translation {key, value} pair:
+  #
+  #     ## Examples
+  #
+  #     iex> translation = {"TidHello", [{"Hej, ", 1},
+  #     ...>                             {". Leder du efter ", 0},
+  #     ...>                             {"?"}]}
+  #     iex> create_translation_pair(translation)
+  #     {"TidHello hole0 hole1",
+  #      "\"Hej, \" ++ hole1 ++ \". Leder du efter \" ++ hole0 ++ \"?\""}
   @spec create_translation_pair({String.t(), [{String.t(), integer} | {String.t()}]}) ::
           {String.t(), String.t()}
   defp create_translation_pair({translation_id, translation}) do

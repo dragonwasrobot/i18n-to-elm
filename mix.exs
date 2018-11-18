@@ -1,28 +1,21 @@
 defmodule I18n2Elm.Mixfile do
   use Mix.Project
 
+  @version "1.0.0"
+
   def project do
     [
       app: :i18n2elm,
-      version: "0.1.1",
-      elixir: "~> 1.6",
-      deps: deps(),
+      version: @version,
+      elixir: "~> 1.7",
       aliases: aliases(),
+      deps: deps(),
+      description: description(),
+      dialyzer: dialyzer(),
+      docs: docs(),
+      escript: escript(),
       build_embedded: Mix.env() == :prod,
-      start_permanent: Mix.env() == :prod,
-
-      # Packaging
-      escript: [
-        main_module: I18n2Elm,
-        name: "i18n2elm"
-      ],
-
-      # Dialyxir
-      dialyzer: [plt_add_deps: :project],
-
-      # Docs
-      name: "I18n2Elm",
-      source_url: ""
+      start_permanent: Mix.env() == :prod
     ]
   end
 
@@ -30,19 +23,44 @@ defmodule I18n2Elm.Mixfile do
     [applications: [:logger]]
   end
 
-  defp deps do
+  defp aliases do
     [
-      {:poison, "~> 3.0"},
-      {:ex_doc, "~> 0.14", only: :dev, runtime: false},
-      {:credo, "~> 0.5", only: [:dev, :test]},
-      {:dialyxir, "~> 0.5", only: [:dev], runtime: false},
-      {:apex, "~>1.0.0"}
+      build: ["deps.get", "compile", "escript.build"],
+      check: ["credo --strict --ignore=RedundantBlankLines"]
     ]
   end
 
-  defp aliases do
+  defp deps do
     [
-      build: ["deps.get", "compile", "escript.build"]
+      {:credo, "~> 1.0.0", only: [:dev, :test]},
+      {:dialyxir, "~> 1.0.0-rc.4", only: [:dev], runtime: false},
+      {:ex_doc, "~> 0.19-rc", only: :dev, runtime: false},
+      {:jason, "~> 1.1"}
     ]
   end
+
+  defp description do
+    """
+    Generates Elm types and functions from i18n key/value JSON files.
+    """
+  end
+
+  defp dialyzer do
+    [plt_add_deps: :project]
+  end
+
+  defp docs do
+    [
+      name: "i18n to Elm",
+      formatter_opts: [gfm: true],
+      source_ref: @version,
+      source_url: "https://github.com/dragonwasrobot/i18n-to-elm",
+      extras: []
+    ]
+  end
+
+  defp escript do
+    [main_module: I18n2Elm, name: "i18n2elm"]
+  end
+
 end

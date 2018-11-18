@@ -30,7 +30,7 @@ defmodule I18n2ElmTest.E2E do
 
     printed_translations = Printer.print_translations(translations, "Translations")
 
-    Logger.debug("#{inspect(printed_translations)}")
+    Logger.debug(fn -> "#{inspect(printed_translations)}" end)
 
     assert true
   end

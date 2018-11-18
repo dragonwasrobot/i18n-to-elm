@@ -20,11 +20,11 @@ defmodule I18n2Elm do
 
   @spec main([String.t()]) :: :ok
   def main(args) do
-    Logger.debug("Arguments: #{inspect(args)}")
+    Logger.debug(fn -> "Arguments: #{inspect(args)}" end)
 
     {options, paths, errors} = OptionParser.parse(args)
 
-    if length(paths) == 0 do
+    if Enum.empty?(paths) do
       IO.puts(@moduledoc)
       exit(:normal)
     end
@@ -35,9 +35,9 @@ defmodule I18n2Elm do
     end
 
     files = resolve_all_paths(paths)
-    Logger.debug("Files: #{inspect(files)}")
+    Logger.debug(fn -> "Files: #{inspect(files)}" end)
 
-    if length(files) == 0 do
+    if Enum.empty?(files) do
       IO.puts("Error: Could not find any JSON files in path: #{inspect(paths)}")
       exit(:no_files)
     end

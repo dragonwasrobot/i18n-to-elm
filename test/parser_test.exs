@@ -16,7 +16,7 @@ defmodule I18n2ElmTest.Parser do
         "Hello": "Hej, {0}. Leder du efter {1}?"
       }
       """
-      |> Poison.decode!()
+      |> Jason.decode!()
       |> Parser.parse_translation("da_DK")
 
     expected_parsed_translation = %Translation{
