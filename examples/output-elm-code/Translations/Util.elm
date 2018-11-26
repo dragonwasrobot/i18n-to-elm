@@ -1,35 +1,33 @@
-module Translations.Util exposing (parseLanguage, translate, LanguageTag(..))
+module Translations.Util exposing (parseLanguage, translate, Language(..))
 
 import Translations.Ids exposing (TranslationId)
 import Translations.DaDk exposing (daDkTranslations)
 import Translations.EnUs exposing (enUsTranslations)
 
 
-type LanguageTag
+type Language
     = DA_DK
     | EN_US
 
 
-parseLanguage : String -> LanguageTag
-parseLanguage tag =
-    case tag of
+parseLanguage : String -> Result String Language
+parseLanguage candidate =
+    case candidate of
         "da_DK" ->
-            DA_DK
+            Ok DA_DK
 
         "en_US" ->
-            EN_US
+            Ok EN_US
 
         _ ->
-            Debug.log
-                ("Unknown language: '" ++ tag ++ "', defaulting to English")
-                EN_US
+            Err <| "Unknown language: '" ++ candidate ++ "'"
 
 
-translate : LanguageTag -> TranslationId -> String
-translate languageTag translationId =
+translate : Language -> TranslationId -> String
+translate language translationId =
     let
         translateFun =
-            case languageTag of
+            case language of
                 DA_DK ->
                     daDkTranslations
 

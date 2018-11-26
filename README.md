@@ -140,38 +140,36 @@ type TranslationId
 and finally `Translations/Util.elm`:
 
 ``` elm
-module Translations.Util exposing (parseLanguage, translate, LanguageTag(..))
+module Translations.Util exposing (parseLanguage, translate, Language(..))
 
 import Translations.Ids exposing (TranslationId)
 import Translations.DaDk exposing (daDkTranslations)
 import Translations.EnUs exposing (enUsTranslations)
 
 
-type LanguageTag
+type Language
     = DA_DK
     | EN_US
 
 
-parseLanguage : String -> LanguageTag
-parseLanguage tag =
-    case tag of
+parseLanguage : String -> Result String Language
+parseLanguage candidate =
+    case candidate of
         "da_DK" ->
-            DA_DK
+            Ok DA_DK
 
         "en_US" ->
-            EN_US
+            Ok EN_US
 
         _ ->
-            Debug.log
-                ("Unknown language: '" ++ tag ++ "', defaulting to English")
-                EN_US
+            Err <| "Unknown language: '" ++ candidate ++ "'"
 
 
-translate : LanguageTag -> TranslationId -> String
-translate languageTag translationId =
+translate : Language -> TranslationId -> String
+translate language translationId =
     let
         translateFun =
-            case languageTag of
+            case language of
                 DA_DK ->
                     daDkTranslations
 
@@ -186,7 +184,7 @@ which contains:
 - The Danish translations as a function, `daDkTranslations`,
 - the English translations as a function, `enUsTranslations`,
 - all the translation IDs as a union type, `TranslationId`,
-- a union type capturing all available languages, `LanguageTag`,
-- a function to parse a string into a `LanguageTag`, `parseLanguage`, and
-- a function to translate a `TranslationId` for a given `LanguageTag` into a
+- a union type capturing all available languages, `Language`,
+- a function to parse a string into a `Language`, `parseLanguage`, and
+- a function to translate a `TranslationId` for a given `Language` into a
   concrete `String` value.
