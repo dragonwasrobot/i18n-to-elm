@@ -22,7 +22,7 @@ defmodule I18n2Elm do
   def main(args) do
     Logger.debug(fn -> "Arguments: #{inspect(args)}" end)
 
-    {options, paths, errors} = OptionParser.parse(args)
+    {options, paths, errors} = OptionParser.parse(args, strict: [module_name: :string])
 
     if Enum.empty?(paths) do
       IO.puts(@moduledoc)
