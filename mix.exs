@@ -2,12 +2,13 @@ defmodule I18n2Elm.Mixfile do
   use Mix.Project
 
   @version "1.0.0"
+  @elixir_version "~> 1.8"
 
   def project do
     [
       app: :i18n2elm,
       version: @version,
-      elixir: "~> 1.7",
+      elixir: @elixir_version,
       aliases: aliases(),
       deps: deps(),
       description: description(),
@@ -62,5 +63,4 @@ defmodule I18n2Elm.Mixfile do
   defp escript do
     [main_module: I18n2Elm, name: "i18n2elm"]
   end
-
 end
