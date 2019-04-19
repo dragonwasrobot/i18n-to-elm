@@ -1,5 +1,9 @@
 # i18n to Elm
 
+### Status
+
+[![Build Status](https://travis-ci.org/dragonwasrobot/i18n-to-elm.svg?branch=master)](https://travis-ci.org/dragonwasrobot/i18n-to-elm)
+
 Generates Elm types and functions from i18n key/value JSON files.
 
 The tool is meant as an aid if you are using a centralized service to handle the
