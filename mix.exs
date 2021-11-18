@@ -33,7 +33,7 @@ defmodule I18n2Elm.Mixfile do
 
   defp deps do
     [
-      {:credo, "~> 1.5.0", only: [:dev, :test]},
+      {:credo, "~> 1.6.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.19-rc", only: :dev, runtime: false},
       {:jason, "~> 1.1"}
