@@ -2,8 +2,6 @@
 
 ### Status
 
-[![Build Status](https://travis-ci.org/dragonwasrobot/i18n-to-elm.svg?branch=master)](https://travis-ci.org/dragonwasrobot/i18n-to-elm)
-
 Generates Elm types and functions from i18n key/value JSON files.
 
 The tool is meant as an aid if you are using a centralized service to handle the
@@ -17,8 +15,9 @@ into your Elm application in a type-safe way.
 ## Installation
 
 This project requires that you already have [elixir](http://elixir-lang.org/)
-and its build tool `mix` installed, this can be done with `brew install elixir`
-or similar.
+and its build tool `mix` installed. This can either be done with
+[asdf](https://asdf-vm.com/), using the included `.tool-versions` file, or
+however you and your operating system prefers to install applications.
 
 - Clone this repository: `git clone
   git@github.com:dragonwasrobot/i18n-to-elm.git`

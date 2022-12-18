@@ -1,5 +1,5 @@
 defmodule I18n2Elm.Parser do
-  @moduledoc ~S"""
+  @moduledoc """
   Parses JSON i18n files into an intermediate representation to be used for
   e.g. printing elm types and functions.
   """

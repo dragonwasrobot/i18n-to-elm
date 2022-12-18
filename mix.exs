@@ -1,8 +1,8 @@
-defmodule I18n2Elm.Mixfile do
+defmodule I18n2Elm.MixProject do
   use Mix.Project
 
-  @version "1.0.0"
-  @elixir_version "~> 1.8"
+  @version "0.2.0"
+  @elixir_version "~> 1.14"
 
   def project do
     [
@@ -15,28 +15,31 @@ defmodule I18n2Elm.Mixfile do
       dialyzer: dialyzer(),
       docs: docs(),
       escript: escript(),
+      preferred_cli_env: preferred_cli_env(),
+      test_coverage: test_coverage(),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod
     ]
   end
 
   def application do
-    [applications: [:logger]]
+    [extra_applications: [:logger, :eex]]
   end
 
   defp aliases do
     [
-      build: ["deps.get", "compile", "escript.build"],
-      check: ["credo --strict --ignore=RedundantBlankLines"]
+      build: ["deps.get", "compile", "escript.build"]
     ]
   end
 
   defp deps do
     [
-      {:credo, "~> 1.6.0", only: [:dev, :test]},
+      {:credo, "~> 1.6.1", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.2.0", only: [:dev], runtime: false},
-      {:ex_doc, "~> 0.19-rc", only: :dev, runtime: false},
-      {:jason, "~> 1.1"}
+      {:ex_doc, "~> 0.29", only: :dev, runtime: false},
+      {:excoveralls, "~> 0.15.0", only: :test, runtime: false},
+      {:jason, "~> 1.4"},
+      {:typed_struct, "~> 0.3.0"}
     ]
   end
 
@@ -62,5 +65,18 @@ defmodule I18n2Elm.Mixfile do
 
   defp escript do
     [main_module: I18n2Elm, name: "i18n2elm"]
+  end
+
+  defp preferred_cli_env do
+    [
+      coveralls: :test,
+      "coveralls.detail": :test,
+      "coveralls.post": :test,
+      "coveralls.html": :test
+    ]
+  end
+
+  defp test_coverage do
+    [tool: ExCoveralls]
   end
 end

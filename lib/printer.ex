@@ -1,10 +1,10 @@
 defmodule I18n2Elm.Printer do
-  @moduledoc ~S"""
+  @moduledoc """
   Prints an intermediate representation of a JSON i18n file into a series
   of elm types and functions.
   """
 
-  @templates_location Application.get_env(:i18n2elm, :templates_location)
+  @templates_location Application.compile_env(:i18n2elm, :templates_location)
   @language_location Path.join(@templates_location, "language.elm.eex")
   @ids_location Path.join(@templates_location, "ids.elm.eex")
   @util_location Path.join(@templates_location, "util.elm.eex")
@@ -39,11 +39,10 @@ defmodule I18n2Elm.Printer do
     printed_translations ++ [printed_ids] ++ [printed_util]
   end
 
-  @doc ~S"""
+  @doc """
   Create translation keys and values
-
   """
-  @spec print_translation(%Translation{}, String.t()) :: {String.t(), String.t()}
+  @spec print_translation(Translation.t(), String.t()) :: {String.t(), String.t()}
   def print_translation(translation, module_name \\ "") do
     file_name = create_file_name(translation)
     file_path = create_file_path(file_name, module_name)

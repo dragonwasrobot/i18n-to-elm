@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 config :i18n2elm, templates_location: "./priv/templates/"
 
