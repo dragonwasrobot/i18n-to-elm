@@ -37,7 +37,7 @@ defmodule I18n2Elm.MixProject do
       {:credo, "~> 1.6.1", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.2.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},
-      {:excoveralls, "~> 0.15.0", only: :test, runtime: false},
+      {:excoveralls, "~> 0.16.0", only: :test, runtime: false},
       {:jason, "~> 1.4"},
       {:typed_struct, "~> 0.3.0"}
     ]
