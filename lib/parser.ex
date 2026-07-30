@@ -4,7 +4,6 @@ defmodule I18n2Elm.Parser do
   e.g. printing elm types and functions.
   """
 
-  require Logger
   alias I18n2Elm.Types.Translation
 
   @spec parse_translation_files([String.t()]) :: [Translation.t()]
@@ -76,8 +75,8 @@ defmodule I18n2Elm.Parser do
   defp tuplify(lst), do: lst |> List.to_tuple()
 
   defp hole_to_number({text, hole}) do
-    {text}
-    |> Tuple.append(hole |> Integer.parse() |> elem(0))
+    hole_number = hole |> Integer.parse() |> elem(0)
+    {text, hole_number}
   end
 
   defp hole_to_number({text}), do: {text}

@@ -9,7 +9,7 @@ defmodule I18n2Elm.Printer do
   @ids_location Path.join(@templates_location, "ids.elm.eex")
   @util_location Path.join(@templates_location, "util.elm.eex")
 
-  require Elixir.{EEx, Logger}
+  require Elixir.EEx
   alias I18n2Elm.Types.Translation
 
   EEx.function_from_file(:defp, :language_template, @language_location, [

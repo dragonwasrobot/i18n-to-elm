@@ -2,7 +2,7 @@ defmodule I18n2Elm.MixProject do
   use Mix.Project
 
   @version "0.2.0"
-  @elixir_version "~> 1.14"
+  @elixir_version "~> 1.20"
 
   def project do
     [
@@ -15,10 +15,20 @@ defmodule I18n2Elm.MixProject do
       dialyzer: dialyzer(),
       docs: docs(),
       escript: escript(),
-      preferred_cli_env: preferred_cli_env(),
       test_coverage: test_coverage(),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod
+    ]
+  end
+
+  def cli do
+    [
+      preferred_envs: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test
+      ]
     ]
   end
 
@@ -50,7 +60,7 @@ defmodule I18n2Elm.MixProject do
   end
 
   defp dialyzer do
-    [plt_add_deps: :project]
+    [plt_add_deps: :apps_direct]
   end
 
   defp docs do
@@ -65,15 +75,6 @@ defmodule I18n2Elm.MixProject do
 
   defp escript do
     [main_module: I18n2Elm, name: "i18n2elm"]
-  end
-
-  defp preferred_cli_env do
-    [
-      coveralls: :test,
-      "coveralls.detail": :test,
-      "coveralls.post": :test,
-      "coveralls.html": :test
-    ]
   end
 
   defp test_coverage do

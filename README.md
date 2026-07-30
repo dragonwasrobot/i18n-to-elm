@@ -14,16 +14,16 @@ into your Elm application in a type-safe way.
 
 ## Installation
 
-This project requires that you already have [elixir](http://elixir-lang.org/)
-and its build tool `mix` installed. This can either be done with
-[asdf](https://asdf-vm.com/), using the included `.tool-versions` file, or
-however you and your operating system prefers to install applications.
+This project requires that you already have the appropriate version of
+[elixir](http://elixir-lang.org/) and [erlang](https://www.erlang.org/). These
+dependencies are managed with [mise](https://mise.jdx.dev/) for this project,
+and specified in `mise.local.toml`, but you are free to use whatever method you
+use for managing compilers and development tools.
 
-- Clone this repository: `git clone
-  git@github.com:dragonwasrobot/i18n-to-elm.git`
-- Build an executable: `MIX_ENV=prod mix build`
-- An executable, `i18n2elm`, has now been created in your current working
-  directory.
+- Clone this repository: `git clone git@github.com:dragonwasrobot/i18n-to-elm.git`
+- Build the executable: `MIX_ENV=prod mix build`
+- The executable, `i18n2elm`, has now been created in your current working directory.
+- Mark the executable as so: `chmod +x i18n2elm`
 
 ## Usage
 
