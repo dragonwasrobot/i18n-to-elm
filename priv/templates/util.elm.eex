@@ -1,24 +1,24 @@
 module <%= module_name %>.Util exposing (parseLanguage, translate, Language(..))
 
-import <%= module_name %>.Ids exposing (TranslationId)<%#
-%><%= for import <- imports do %>
+import <%= module_name %>.Ids exposing (TranslationId)<%!--
+--%><%= for import <- imports do %>
 import <%= module_name %>.<%= import.file_name %> exposing (<%= import.translation_name %>)<% end %>
 
 
 type Language
-    = <%= for {language, idx} <- Enum.with_index(languages) do %><%#
-    %><%= if idx == 0 do %><%#
-    %><%= language.type_value %><%#
-    %><% else %>
-    | <%= language.type_value %><%#
-    %><% end %><%#
-    %><% end %>
+    = <%= for {language, idx} <- Enum.with_index(languages) do %><%!--
+  --%><%= if idx == 0 do %><%!--
+  --%><%= language.type_value %><%!--
+  --%><% else %>
+    | <%= language.type_value %><%!--
+  --%><% end %><%!--
+  --%><% end %>
 
 
 parseLanguage : String -> Result String Language
 parseLanguage candidate =
-    case candidate of<%#
-    %><%= for language <- languages do %>
+    case candidate of<%!--
+  --%><%= for language <- languages do %>
         "<%= language.string_value %>" ->
             Ok <%= language.type_value %>
 <% end %>
@@ -30,10 +30,10 @@ translate : Language -> TranslationId -> String
 translate language translationId =
     let
         translateFun =
-            case language of<%#
-    %><%= for language <- languages do %>
+            case language of<%!--
+  --%><%= for language <- languages do %>
                 <%= language.type_value %> ->
                     <%= language.translation_fun %>
-<% end %><%#
-%>    in
+<% end %><%!--
+--%>    in
         translateFun translationId

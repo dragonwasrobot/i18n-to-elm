@@ -29,7 +29,7 @@ defmodule I18n2Elm do
       exit(:normal)
     end
 
-    if length(errors) > 0 do
+    if errors != [] do
       IO.puts("Error: Found one or more errors in the supplied options")
       exit({:unknown_arguments, errors})
     end
