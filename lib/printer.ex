@@ -92,6 +92,7 @@ defmodule I18n2Elm.Printer do
     |> Enum.map_join(" ", fn hole_number -> "hole#{hole_number}" end)
   end
 
+  @spec two_tuple?(term) :: boolean
   defp two_tuple?({_left, _right}), do: true
   defp two_tuple?(_), do: false
 
