@@ -46,6 +46,28 @@ json file is a simple dictionary of i18n keys and values, for example:
 A complete example of input and output code can be found in the `examples`
 folder.
 
+## Vocabulary
+
+Domain terms used throughout the code and documentation, defined once here:
+
+- **Translation**: a parsed translation file: a language tag plus its list of
+  translation key/value pairs.
+- **Language tag**: the `<language>_<COUNTRY>` identifier a translation file is
+  named after, e.g. `da_DK`.
+- **Hole**: a `{N}`-style placeholder in a translation value, turned into a
+  positional Elm function parameter (`hole0`, `hole1`, ...); numbering must be
+  contiguous and 0-indexed.
+- **Translation ID**: the shared Elm union type of all translation keys (e.g.
+  `TidHello`), derived from the `en_US` translation file.
+- **Language resource**: the printer's per-language template input: a
+  translation's file name, translation function name, and translation pairs.
+- **IDs resource**: the printer's template input for the Translation ID union
+  type.
+- **Util resource**: the printer's template input for the Language union type
+  and the `parseLanguage`/`translate` dispatch functions.
+- **Module name**: the Elm module name prefix (`--module-name`) under which all
+  generated files are namespaced; defaults to `Translations`.
+
 ## Example
 
 If we supply `i18n2elm` with the folder `examples/input-i18n-json`, containing
