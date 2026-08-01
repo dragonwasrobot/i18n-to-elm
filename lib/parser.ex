@@ -8,6 +8,8 @@ defmodule I18n2Elm.Parser do
   alias I18n2Elm.Types
   alias I18n2Elm.Types.Translation
 
+  @type reason :: {:invalid_hole_numbering, String.t()}
+
   @doc ~S"""
   Parses a map of translations of the format:
 
@@ -17,8 +19,7 @@ defmodule I18n2Elm.Parser do
 
   into a corresponding `Translation` struct.
   """
-  @spec parse_translation(map, String.t()) ::
-          {:ok, Translation.t()} | {:error, {:invalid_hole_numbering, String.t()}}
+  @spec parse_translation(map, String.t()) :: {:ok, Translation.t()} | {:error, reason()}
   def parse_translation(translation_map, language_tag) do
     translations =
       translation_map
@@ -70,7 +71,7 @@ defmodule I18n2Elm.Parser do
   # all at once, since each produces a sorted list that doesn't match the
   # expected 0..n-1 range.
   @spec validate_hole_numbering({String.t(), [Types.hole_token()]}) ::
-          {:ok, String.t()} | {:error, {:invalid_hole_numbering, String.t()}}
+          {:ok, String.t()} | {:error, reason()}
   defp validate_hole_numbering({translation_id, hole_tokens}) do
     hole_numbers =
       hole_tokens

@@ -19,6 +19,13 @@ defmodule I18n2Elm do
   alias I18n2Elm.{Parser, Printer, Result, Types}
   alias I18n2Elm.Types.Translation
 
+  @type reason ::
+          File.posix()
+          | Jason.DecodeError.t()
+          | Parser.reason()
+          | Printer.reason()
+          | {:mismatched_keys, Types.language_tag()}
+
   @spec main([String.t()]) :: no_return
   def main(args) do
     Logger.debug("Arguments: #{inspect(args)}")
@@ -52,11 +59,12 @@ defmodule I18n2Elm do
     end
   end
 
-  @spec validate_no_option_errors(list) :: :ok | {:error, {:unknown_arguments, list}}
+  @spec validate_no_option_errors(OptionParser.errors()) ::
+          :ok | {:error, {:unknown_arguments, OptionParser.errors()}}
   defp validate_no_option_errors([]), do: :ok
   defp validate_no_option_errors(errors), do: {:error, {:unknown_arguments, errors}}
 
-  @spec resolve_all_paths([Path.t()]) :: {:ok, [Path.t()]} | {:error, term}
+  @spec resolve_all_paths([Path.t()]) :: {:ok, [Path.t()]} | {:error, File.posix()}
   defp resolve_all_paths(paths) do
     existing_paths = Enum.filter(paths, &File.exists?/1)
 
@@ -65,7 +73,7 @@ defmodule I18n2Elm do
     end
   end
 
-  @spec expand_path(Path.t()) :: {:ok, [Path.t()]} | {:error, term}
+  @spec expand_path(Path.t()) :: {:ok, [Path.t()]} | {:error, File.posix()}
   defp expand_path(path) do
     cond do
       File.dir?(path) ->
@@ -94,7 +102,7 @@ defmodule I18n2Elm do
     end
   end
 
-  @spec create_output_dir(list) :: {:ok, Path.t()} | {:error, term}
+  @spec create_output_dir(list) :: {:ok, Path.t()} | {:error, File.posix()}
   defp create_output_dir(options) do
     output_path =
       if Keyword.has_key?(options, :module_name) do
@@ -108,7 +116,7 @@ defmodule I18n2Elm do
     end
   end
 
-  @spec generate([Path.t()], String.t()) :: {:ok, [Path.t()]} | {:error, term}
+  @spec generate([Path.t()], String.t()) :: {:ok, [Path.t()]} | {:error, reason()}
   def generate(json_translations_path, module_name) do
     with {:ok, translations} <- read_translation_files(json_translations_path),
          :ok <- validate_reference_language_present(translations),
@@ -159,7 +167,7 @@ defmodule I18n2Elm do
     |> MapSet.new()
   end
 
-  @spec write_file(Path.t(), String.t()) :: {:ok, Path.t()} | {:error, term}
+  @spec write_file(Path.t(), String.t()) :: {:ok, Path.t()} | {:error, File.posix()}
   defp write_file(file_path, file_content) do
     with {:ok, file} <- File.open(file_path, [:write]),
          :ok <- IO.binwrite(file, file_content),
@@ -169,10 +177,12 @@ defmodule I18n2Elm do
     end
   end
 
-  @spec read_translation_files([Path.t()]) :: {:ok, [Translation.t()]} | {:error, term}
+  @type read_reason :: File.posix() | Jason.DecodeError.t() | Parser.reason()
+
+  @spec read_translation_files([Path.t()]) :: {:ok, [Translation.t()]} | {:error, read_reason()}
   defp read_translation_files(paths), do: Result.traverse(paths, &read_translation_file/1)
 
-  @spec read_translation_file(Path.t()) :: {:ok, Translation.t()} | {:error, term}
+  @spec read_translation_file(Path.t()) :: {:ok, Translation.t()} | {:error, read_reason()}
   defp read_translation_file(translation_file_path) do
     language_tag = Path.basename(translation_file_path, ".json")
 
