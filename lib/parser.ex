@@ -8,7 +8,8 @@ defmodule I18n2Elm.Parser do
   alias I18n2Elm.Types
   alias I18n2Elm.Types.Translation
 
-  @type reason :: {:invalid_hole_numbering, String.t()}
+  @type reason ::
+          {:invalid_hole_numbering, String.t()} | {:invalid_hole_placeholder, String.t()}
 
   @doc ~S"""
   Parses a map of translations of the format:
@@ -21,14 +22,14 @@ defmodule I18n2Elm.Parser do
   """
   @spec parse_translation(map, String.t()) :: {:ok, Translation.t()} | {:error, reason()}
   def parse_translation(translation_map, language_tag) do
-    translations =
+    prefixed_translations =
       translation_map
       |> Enum.to_list()
       |> Enum.sort()
-      |> Enum.map(&check_for_holes/1)
       |> Enum.map(fn {key, value} -> {"Tid#{key}", value} end)
 
-    with {:ok, _translation_ids} <- Result.traverse(translations, &validate_hole_numbering/1) do
+    with {:ok, translations} <- Result.traverse(prefixed_translations, &check_for_holes/1),
+         {:ok, _translation_ids} <- Result.traverse(translations, &validate_hole_numbering/1) do
       {:ok, Translation.new(translations, language_tag)}
     end
   end
@@ -38,15 +39,15 @@ defmodule I18n2Elm.Parser do
   # turns. Chunking that two at a time regroups each text run with the hole
   # number immediately following it; the final chunk is a singleton exactly when
   # the value ends in plain text (no trailing hole).
-  @spec check_for_holes({String.t(), String.t()}) :: {String.t(), [Types.hole_token()]}
-  defp check_for_holes({key, text}) do
-    text_with_holes =
-      text
-      |> split
-      |> group
-      |> Enum.map(&to_hole_token/1)
+  @spec check_for_holes({String.t(), String.t()}) ::
+          {:ok, {String.t(), [Types.hole_token()]}} | {:error, reason()}
+  defp check_for_holes({translation_id, text}) do
+    hole_tokens_result = text |> split |> group |> Result.traverse(&to_hole_token/1)
 
-    {key, text_with_holes}
+    case hole_tokens_result do
+      {:ok, text_with_holes} -> {:ok, {translation_id, text_with_holes}}
+      {:error, :invalid_hole_placeholder} -> {:error, {:invalid_hole_placeholder, translation_id}}
+    end
   end
 
   @spec split(String.t()) :: [String.t()]
@@ -55,12 +56,15 @@ defmodule I18n2Elm.Parser do
   @spec group([String.t()]) :: [[String.t()]]
   defp group(lst), do: lst |> Enum.chunk_every(2)
 
-  @spec to_hole_token([String.t()]) :: Types.hole_token()
-  defp to_hole_token([text]), do: {:text, text}
+  @spec to_hole_token([String.t()]) ::
+          {:ok, Types.hole_token()} | {:error, :invalid_hole_placeholder}
+  defp to_hole_token([text]), do: {:ok, {:text, text}}
 
   defp to_hole_token([text, hole]) do
-    hole_number = hole |> Integer.parse() |> elem(0)
-    {:hole, text, hole_number}
+    case Integer.parse(hole) do
+      {hole_number, ""} -> {:ok, {:hole, text, hole_number}}
+      _ -> {:error, :invalid_hole_placeholder}
+    end
   end
 
   # Validates that a translation value's hole numbers are exactly 0..n-1 once

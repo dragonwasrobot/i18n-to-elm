@@ -66,10 +66,20 @@ defmodule I18n2Elm do
 
   @spec resolve_all_paths([Path.t()]) :: {:ok, [Path.t()]} | {:error, File.posix()}
   defp resolve_all_paths(paths) do
-    existing_paths = Enum.filter(paths, &File.exists?/1)
+    existing_paths = Enum.filter(paths, &existing_path?/1)
 
     with {:ok, expanded} <- Result.traverse(existing_paths, &expand_path/1) do
       {:ok, List.flatten(expanded)}
+    end
+  end
+
+  @spec existing_path?(Path.t()) :: boolean
+  defp existing_path?(path) do
+    if File.exists?(path) do
+      true
+    else
+      Logger.warning("Skipping nonexistent path: #{path}")
+      false
     end
   end
 
@@ -78,7 +88,7 @@ defmodule I18n2Elm do
     cond do
       File.dir?(path) ->
         with {:ok, entries} <- File.ls(path),
-             {:ok, expanded} <- Result.traverse(entries, &expand_path("#{path}/#{&1}")) do
+             {:ok, expanded} <- Result.traverse(entries, &expand_path(Path.join(path, &1))) do
           {:ok, List.flatten(expanded)}
         end
 
@@ -104,12 +114,7 @@ defmodule I18n2Elm do
 
   @spec create_output_dir(list) :: {:ok, Path.t()} | {:error, File.posix()}
   defp create_output_dir(options) do
-    output_path =
-      if Keyword.has_key?(options, :module_name) do
-        Keyword.get(options, :module_name)
-      else
-        "Translations"
-      end
+    output_path = Keyword.get(options, :module_name, "Translations")
 
     with :ok <- File.mkdir_p(output_path) do
       {:ok, output_path}

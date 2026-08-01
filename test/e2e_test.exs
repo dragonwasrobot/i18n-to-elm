@@ -1,26 +1,42 @@
 defmodule I18n2ElmTest.E2E do
   use ExUnit.Case
 
-  test "should generate an Elm file per language plus Ids and Util modules on disk" do
-    # Given real en_US and da_DK translation files on disk
+  setup do
+    module_name = "Translations"
+
     input_dir =
       Path.join(System.tmp_dir!(), "i18n2elm_e2e_#{System.unique_integer([:positive])}")
 
     File.mkdir_p!(input_dir)
+
+    output_dir =
+      Path.join(System.tmp_dir!(), "i18n2elm_e2e_out_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(Path.join(output_dir, module_name))
+
+    on_exit(fn ->
+      File.rm_rf!(input_dir)
+      File.rm_rf!(output_dir)
+    end)
+
+    {:ok, module_name: module_name, input_dir: input_dir, output_dir: output_dir}
+  end
+
+  test "should generate an Elm file per language plus Ids and Util modules on disk", %{
+    module_name: module_name,
+    input_dir: input_dir,
+    output_dir: output_dir
+  } do
+    # Given real en_US and da_DK translation files on disk
     en_us_path = Path.join(input_dir, "en_US.json")
     da_dk_path = Path.join(input_dir, "da_DK.json")
     File.write!(en_us_path, ~S({"Hello": "Hello, {0}!", "Yes": "Yes"}))
     File.write!(da_dk_path, ~S({"Hello": "Hej, {0}!", "Yes": "Ja"}))
 
-    output_dir =
-      Path.join(System.tmp_dir!(), "i18n2elm_e2e_out_#{System.unique_integer([:positive])}")
-
-    File.mkdir_p!(Path.join(output_dir, "Translations"))
-
     # When generating Elm code from those files
     result =
       File.cd!(output_dir, fn ->
-        I18n2Elm.generate([en_us_path, da_dk_path], "Translations")
+        I18n2Elm.generate([en_us_path, da_dk_path], module_name)
       end)
 
     # Then generation succeeds and each expected file exists on disk with real content
@@ -44,8 +60,5 @@ defmodule I18n2ElmTest.E2E do
     assert util_elm =~ "type Language"
     assert util_elm =~ "DA_DK"
     assert util_elm =~ "EN_US"
-
-    File.rm_rf!(input_dir)
-    File.rm_rf!(output_dir)
   end
 end

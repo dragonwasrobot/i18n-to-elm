@@ -33,7 +33,7 @@ defmodule I18n2Elm.Printer do
 
   @spec print_translations([Translation.t()], String.t()) ::
           {:ok, [Types.printed_file()]} | {:error, reason()}
-  def print_translations(translations, module_name \\ "") do
+  def print_translations(translations, module_name) do
     with {:ok, printed_translations} <-
            Result.traverse(translations, &print_translation(&1, module_name)),
          {:ok, printed_ids} <- print_ids(translations, module_name),
@@ -51,7 +51,7 @@ defmodule I18n2Elm.Printer do
   """
   @spec print_translation(Translation.t(), String.t()) ::
           {:ok, Types.printed_file()} | {:error, :invalid_language_tag}
-  def print_translation(translation, module_name \\ "") do
+  def print_translation(translation, module_name) do
     with {:ok, file_name} <- create_file_name(translation),
          {:ok, translation_name} <- create_translation_name(translation) do
       file_path = create_file_path(file_name, module_name)
@@ -121,7 +121,7 @@ defmodule I18n2Elm.Printer do
 
   @spec print_ids([Translation.t()], String.t()) ::
           {:ok, Types.printed_file()} | {:error, :missing_reference_translation}
-  def print_ids(translations, module_name \\ "") do
+  def print_ids(translations, module_name) do
     file_name = "Ids"
     file_path = create_file_path(file_name, module_name)
 
@@ -156,7 +156,7 @@ defmodule I18n2Elm.Printer do
 
   @spec print_util([Translation.t()], String.t()) ::
           {:ok, Types.printed_file()} | {:error, :invalid_language_tag}
-  def print_util(translations, module_name \\ "") do
+  def print_util(translations, module_name) do
     file_name = "Util"
     file_path = create_file_path(file_name, module_name)
     sorted_translations = Enum.sort(translations, &by_language_tag/2)

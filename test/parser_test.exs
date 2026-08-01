@@ -59,4 +59,17 @@ defmodule I18n2ElmTest.Parser do
     # Then parsing fails, naming the offending translation ID
     assert {:error, {:invalid_hole_numbering, "TidHello"}} = result
   end
+
+  test "should reject a translation value with a non-numeric hole placeholder" do
+    # Given a translation value whose `{N}`-style placeholder isn't a number
+    json = ~S"""
+    {"Hello": "Hej, {abc}?"}
+    """
+
+    # When parsing it for the da_DK language tag
+    result = json |> Jason.decode!() |> Parser.parse_translation("da_DK")
+
+    # Then parsing fails, naming the offending translation ID
+    assert {:error, {:invalid_hole_placeholder, "TidHello"}} = result
+  end
 end
