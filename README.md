@@ -12,7 +12,7 @@ into your Elm application in a type-safe way.
 > like [my other project](https://github.com/dragonwasrobot/json-schema-to-elm)
 > which turns JSON-schema specs into Elm types+decoders+encoders.
 
-## Installation
+## Setup
 
 This project requires that you already have the appropriate version of
 [elixir](http://elixir-lang.org/) and [erlang](https://www.erlang.org/). These
@@ -25,13 +25,17 @@ use for managing compilers and development tools.
 - The executable, `i18n2elm`, has now been created in your current working directory.
 - Mark the executable as so: `chmod +x i18n2elm`
 
+When working on the codebase, use `fswatch lib test | mix test
+--listen-on-stdin` to hot reload the test suite while making changes.
+
 ## Usage
 
 Run `./i18n2elm` for usage instructions.
 
-The executable expects one or more json files with the naming scheme: `<language
-code>_<COUNTRY CODE>.json`, e.g. `en_US.json` or `da_DK.json`, and that each
-json file is a simple dictionary of i18n keys and values, for example:
+The executable expects one or more JSON files with the naming scheme: `<language
+tag>.json`, i.e. `<language>_<COUNTRY>.json`, e.g. `en_US.json` or `da_DK.json`,
+and that each JSON file is a simple dictionary of i18n keys and values, for
+example:
 
 ``` json
 {
@@ -54,11 +58,16 @@ Domain terms used throughout the code and documentation, defined once here:
   translation key/value pairs.
 - **Language tag**: the `<language>_<COUNTRY>` identifier a translation file is
   named after, e.g. `da_DK`.
+- **Reference language**: the language tag treated as the default/reference
+  language, currently `en_US`. The **reference translation** -- the
+  **Translation** whose language tag matches it -- is what the **Translation
+  ID** and the `Util` module's language dispatch are derived from; every input
+  file must share its key set, and one input file must be for this language.
 - **Hole**: a `{N}`-style placeholder in a translation value, turned into a
   positional Elm function parameter (`hole0`, `hole1`, ...); numbering must be
   contiguous and 0-indexed.
 - **Translation ID**: the shared Elm union type of all translation keys (e.g.
-  `TidHello`), derived from the `en_US` translation file.
+  `TidHello`), derived from the reference translation.
 - **Language resource**: the printer's per-language template input: a
   translation's file name, translation function name, and translation pairs.
 - **IDs resource**: the printer's template input for the Translation ID union

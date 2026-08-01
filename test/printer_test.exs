@@ -1,24 +1,47 @@
 defmodule I18n2ElmTest.Printer do
   use ExUnit.Case
-  doctest I18n2Elm.Printer, import: true
 
   alias I18n2Elm.{Printer, Types}
   alias Types.Translation
 
-  test "print language translation file" do
-    {translations_file_path, translations_file} =
-      %Translation{
+  setup do
+    translations = %{
+      da: %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidHello", [{"Hej, ", 1}, {". Leder du efter ", 0}, {"?"}]},
-          {"TidNext", [{"Næste"}]},
-          {"TidNo", [{"Nej"}]},
-          {"TidPrevious", [{"Forrige"}]},
-          {"TidYes", [{"Ja"}]}
+          {"TidHello", [{:hole, "Hej, ", 1}, {:hole, ". Leder du efter ", 0}, {:text, "?"}]},
+          {"TidNext", [{:text, "Næste"}]},
+          {"TidNo", [{:text, "Nej"}]},
+          {"TidPrevious", [{:text, "Forrige"}]},
+          {"TidYes", [{:text, "Ja"}]}
+        ]
+      },
+      en: %Translation{
+        language_tag: "en_US",
+        translations: [
+          {"TidHello",
+           [{:hole, "Hello, ", 1}, {:hole, "It is ", 0}, {:text, "you are looking for?"}]},
+          {"TidNext", [{:text, "Next"}]},
+          {"TidNo", [{:text, "No"}]},
+          {"TidPrevious", [{:text, "Previous"}]},
+          {"TidYes", [{:text, "Yes"}]}
         ]
       }
-      |> Printer.print_translation("Translations")
+    }
 
+    {:ok, translations: translations}
+  end
+
+  test "should print a language's Elm translation module", %{translations: translations} do
+    # Given a translation (da_DK) with a holed value and several plain ones
+    translation = translations.da
+
+    # When generating the corresponding translations module
+    {:ok, {translations_file_path, translations_file}} =
+      Printer.print_translation(translation, "Translations")
+
+    # Then the file path and generated module match, with hole numbering rather
+    # than textual order deciding case parameter order
     expected_translations_file = ~S"""
     module Translations.DaDk exposing (daDkTranslations)
 
@@ -48,32 +71,16 @@ defmodule I18n2ElmTest.Printer do
     assert translations_file == expected_translations_file
   end
 
-  test "print ids file" do
-    translations = [
-      %Translation{
-        language_tag: "da_DK",
-        translations: [
-          {"TidHello", [{"Hej, ", 0}, {". Leder du efter ", 1}, {"?"}]},
-          {"TidNext", [{"Næste"}]},
-          {"TidNo", [{"Nej"}]},
-          {"TidPrevious", [{"Forrige"}]},
-          {"TidYes", [{"Ja"}]}
-        ]
-      },
-      %Translation{
-        language_tag: "en_US",
-        translations: [
-          {"TidHello", [{"Hello, ", 0}, {"It is ", 1}, {"you are looking for?"}]},
-          {"TidNext", [{"Next"}]},
-          {"TidNo", [{"No"}]},
-          {"TidPrevious", [{"Previous"}]},
-          {"TidYes", [{"Yes"}]}
-        ]
-      }
-    ]
+  test "should print the shared translation IDs from the reference translation", %{
+    translations: translations
+  } do
+    # Given a reference (en_US) and a non-reference (da_DK) translation
+    translations_list = [translations.da, translations.en]
 
-    {ids_file_path, ids_file} = Printer.print_ids(translations, "Translations")
+    # When printing the translation IDs module
+    {:ok, {ids_file_path, ids_file}} = Printer.print_ids(translations_list, "Translations")
 
+    # Then the file path and generated union type match, derived from reference language
     expected_ids_file = ~S"""
     module Translations.Ids exposing (TranslationId(..))
 
@@ -90,32 +97,17 @@ defmodule I18n2ElmTest.Printer do
     assert ids_file == expected_ids_file
   end
 
-  test "prints util file" do
-    translations = [
-      %Translation{
-        language_tag: "da_DK",
-        translations: [
-          {"TidHello", [{"Hej, ", 0}, {". Leder du efter ", 1}, {"?"}]},
-          {"TidNext", [{"Næste"}]},
-          {"TidNo", [{"Nej"}]},
-          {"TidPrevious", [{"Forrige"}]},
-          {"TidYes", [{"Ja"}]}
-        ]
-      },
-      %Translation{
-        language_tag: "en_US",
-        translations: [
-          {"TidHello", [{"Hello, ", 0}, {"It is ", 1}, {"you are looking for?"}]},
-          {"TidNext", [{"Next"}]},
-          {"TidNo", [{"No"}]},
-          {"TidPrevious", [{"Previous"}]},
-          {"TidYes", [{"Yes"}]}
-        ]
-      }
-    ]
+  test "should print the available languages and corresponding dispatch functions", %{
+    translations: translations
+  } do
+    # Given two translations for different languages
+    translations_list = [translations.da, translations.en]
 
-    {util_file_path, util_file} = Printer.print_util(translations, "Translations")
+    # When printing the util module
+    {:ok, {util_file_path, util_file}} = Printer.print_util(translations_list, "Translations")
 
+    # Then the file path and generated Elm module match, listing languages
+    # sorted by language tag and dispatching to each one's translation function
     expected_util_file = ~S"""
     module Translations.Util exposing (parseLanguage, translate, Language(..))
 

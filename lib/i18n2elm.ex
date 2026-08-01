@@ -1,6 +1,6 @@
 defmodule I18n2Elm do
   @moduledoc ~S"""
-  Transforms a folder of i18n key/value JSON files into a series of Elm types \
+  Transforms a folder of i18n key/value JSON files into a series of Elm types
   and functions.
 
   Expects a PATH to one or more JSON files from which to generate Elm code.
@@ -11,16 +11,17 @@ defmodule I18n2Elm do
 
   ## Options
 
-      * `--module-name` - the module name prefix for the printed Elm modules \
+      * `--module-name` - the module name prefix for the printed Elm modules
       default value is 'Translations'.
   """
 
   require Logger
-  alias I18n2Elm.{Parser, Printer}
+  alias I18n2Elm.{Parser, Printer, Result, Types}
+  alias I18n2Elm.Types.Translation
 
-  @spec main([String.t()]) :: :ok
+  @spec main([String.t()]) :: no_return
   def main(args) do
-    Logger.debug(fn -> "Arguments: #{inspect(args)}" end)
+    Logger.debug("Arguments: #{inspect(args)}")
 
     {options, paths, errors} = OptionParser.parse(args, strict: [module_name: :string])
 
@@ -29,62 +30,71 @@ defmodule I18n2Elm do
       exit(:normal)
     end
 
-    if errors != [] do
-      IO.puts("Error: Found one or more errors in the supplied options")
-      exit({:unknown_arguments, errors})
+    with :ok <- validate_no_option_errors(errors),
+         {:ok, files} <- resolve_all_paths(paths),
+         :ok <- validate_files_found(files, paths),
+         {:ok, output_path} <- create_output_dir(options),
+         {:ok, written_files} <- generate(files, output_path) do
+      Logger.debug("Written files: #{inspect(written_files)}")
+      exit(:normal)
+    else
+      {:error, {:unknown_arguments, errors}} ->
+        Logger.error("Found one or more errors in the supplied options: #{inspect(errors)}")
+        exit({:unknown_arguments, errors})
+
+      {:error, {:no_files, paths}} ->
+        Logger.error("Could not find any JSON files in path: #{inspect(paths)}")
+        exit(:no_files)
+
+      {:error, reason} ->
+        Logger.error(inspect(reason))
+        exit(reason)
     end
-
-    files = resolve_all_paths(paths)
-    Logger.debug(fn -> "Files: #{inspect(files)}" end)
-
-    if Enum.empty?(files) do
-      IO.puts("Error: Could not find any JSON files in path: #{inspect(paths)}")
-      exit(:no_files)
-    end
-
-    output_path = create_output_dir(options)
-    generate(files, output_path)
   end
 
-  @spec resolve_all_paths([String.t()]) :: [String.t()]
+  @spec validate_no_option_errors(list) :: :ok | {:error, {:unknown_arguments, list}}
+  defp validate_no_option_errors([]), do: :ok
+  defp validate_no_option_errors(errors), do: {:error, {:unknown_arguments, errors}}
+
+  @spec resolve_all_paths([Path.t()]) :: {:ok, [Path.t()]} | {:error, term}
   defp resolve_all_paths(paths) do
-    paths
-    |> Enum.filter(&File.exists?/1)
-    |> Enum.reduce([], fn filename, files ->
-      cond do
-        File.dir?(filename) ->
-          walk_directory(filename) ++ files
+    existing_paths = Enum.filter(paths, &File.exists?/1)
 
-        String.ends_with?(filename, ".json") ->
-          [filename | files]
-
-        true ->
-          files
-      end
-    end)
+    with {:ok, expanded} <- Result.traverse(existing_paths, &expand_path/1) do
+      {:ok, List.flatten(expanded)}
+    end
   end
 
-  @spec walk_directory(String.t()) :: [String.t()]
-  defp walk_directory(dir) do
-    dir
-    |> File.ls!()
-    |> Enum.reduce([], fn file, files ->
-      filename = "#{dir}/#{file}"
+  @spec expand_path(Path.t()) :: {:ok, [Path.t()]} | {:error, term}
+  defp expand_path(path) do
+    cond do
+      File.dir?(path) ->
+        with {:ok, entries} <- File.ls(path),
+             {:ok, expanded} <- Result.traverse(entries, &expand_path("#{path}/#{&1}")) do
+          {:ok, List.flatten(expanded)}
+        end
 
-      cond do
-        File.dir?(filename) ->
-          walk_directory(filename) ++ files
+      String.ends_with?(path, ".json") ->
+        {:ok, [path]}
 
-        String.ends_with?(file, ".json") ->
-          [filename | files]
-
-        true ->
-          files
-      end
-    end)
+      true ->
+        Logger.warning("Skipping non-JSON path: #{path}")
+        {:ok, []}
+    end
   end
 
-  @spec create_output_dir(list) :: String.t()
+  @spec validate_files_found([Path.t()], [Path.t()]) ::
+          :ok | {:error, {:no_files, [Path.t()]}}
+  defp validate_files_found(files, paths) do
+    Logger.debug("Files: #{inspect(files)}")
+
+    case files do
+      [] -> {:error, {:no_files, paths}}
+      _ -> :ok
+    end
+  end
+
+  @spec create_output_dir(list) :: {:ok, Path.t()} | {:error, term}
   defp create_output_dir(options) do
     output_path =
       if Keyword.has_key?(options, :module_name) do
@@ -93,23 +103,82 @@ defmodule I18n2Elm do
         "Translations"
       end
 
-    output_path
-    |> File.mkdir_p!()
-
-    output_path
+    with :ok <- File.mkdir_p(output_path) do
+      {:ok, output_path}
+    end
   end
 
-  @spec generate([String.t()], String.t()) :: :ok
+  @spec generate([Path.t()], String.t()) :: {:ok, [Path.t()]} | {:error, term}
   def generate(json_translations_path, module_name) do
-    translations = Parser.parse_translation_files(json_translations_path)
-    printed_translations = Printer.print_translations(translations, module_name)
+    with {:ok, translations} <- read_translation_files(json_translations_path),
+         :ok <- validate_reference_language_present(translations),
+         :ok <- validate_matching_key_sets(translations),
+         {:ok, printed_translations} <- Printer.print_translations(translations, module_name) do
+      Result.traverse(printed_translations, fn {file_path, file_content} ->
+        write_file(file_path, file_content)
+      end)
+    end
+  end
 
-    printed_translations
-    |> Enum.each(fn {file_path, file_content} ->
-      {:ok, file} = File.open(file_path, [:write])
-      IO.binwrite(file, file_content)
-      File.close(file)
+  @spec validate_reference_language_present([Translation.t()]) ::
+          :ok | {:error, :missing_reference_translation}
+  defp validate_reference_language_present(translations) do
+    if Enum.any?(translations, &reference_translation?/1) do
+      :ok
+    else
+      {:error, :missing_reference_translation}
+    end
+  end
+
+  @spec validate_matching_key_sets([Translation.t()]) ::
+          :ok | {:error, {:mismatched_keys, Types.language_tag()}}
+  defp validate_matching_key_sets(translations) do
+    reference_keys =
+      translations
+      |> Enum.find(&reference_translation?/1)
+      |> translation_keys()
+
+    translations
+    |> Enum.reject(&reference_translation?/1)
+    |> Enum.find(&(not MapSet.equal?(translation_keys(&1), reference_keys)))
+    |> case do
+      nil -> :ok
+      %Translation{language_tag: language_tag} -> {:error, {:mismatched_keys, language_tag}}
+    end
+  end
+
+  @spec reference_translation?(Translation.t()) :: boolean
+  defp reference_translation?(%Translation{language_tag: language_tag}) do
+    language_tag == Types.reference_language_tag()
+  end
+
+  @spec translation_keys(Translation.t()) :: MapSet.t(String.t())
+  defp translation_keys(%Translation{translations: translations}) do
+    translations
+    |> Enum.map(fn {translation_id, _hole_tokens} -> translation_id end)
+    |> MapSet.new()
+  end
+
+  @spec write_file(Path.t(), String.t()) :: {:ok, Path.t()} | {:error, term}
+  defp write_file(file_path, file_content) do
+    with {:ok, file} <- File.open(file_path, [:write]),
+         :ok <- IO.binwrite(file, file_content),
+         :ok <- File.close(file) do
       Logger.info("Created file: #{file_path}")
-    end)
+      {:ok, file_path}
+    end
+  end
+
+  @spec read_translation_files([Path.t()]) :: {:ok, [Translation.t()]} | {:error, term}
+  defp read_translation_files(paths), do: Result.traverse(paths, &read_translation_file/1)
+
+  @spec read_translation_file(Path.t()) :: {:ok, Translation.t()} | {:error, term}
+  defp read_translation_file(translation_file_path) do
+    language_tag = Path.basename(translation_file_path, ".json")
+
+    with {:ok, contents} <- File.read(translation_file_path),
+         {:ok, decoded} <- Jason.decode(contents) do
+      Parser.parse_translation(decoded, language_tag)
+    end
   end
 end

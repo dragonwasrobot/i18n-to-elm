@@ -1,83 +1,90 @@
 defmodule I18n2Elm.Parser do
   @moduledoc """
   Parses JSON i18n files into an intermediate representation to be used for
-  e.g. printing elm types and functions.
+  e.g. printing Elm types and functions.
   """
 
+  alias I18n2Elm.Result
+  alias I18n2Elm.Types
   alias I18n2Elm.Types.Translation
 
-  @spec parse_translation_files([String.t()]) :: [Translation.t()]
-  def parse_translation_files(translation_file_paths) do
-    translation_file_paths
-    |> Enum.map(&parse_translation_file(&1))
-  end
-
-  @spec parse_translation_file(String.t()) :: Translation.t()
-  def parse_translation_file(translation_file_path) do
-    language_tag = Path.basename(translation_file_path, ".json")
-
-    translation_file_path
-    |> File.read!()
-    |> Jason.decode!()
-    |> parse_translation(language_tag)
-  end
-
   @doc ~S"""
-  Parses a map of translations into a `Translation` struct.
+  Parses a map of translations of the format:
 
-  ## Examples
+      %{"Yes" => "Ja",
+        "No" => "Nej",
+        "Hello" => "Hej, {0}. Leder du efter {1}?"}
 
-      iex> translation = %{"Yes" => "Ja",
-      ...>                 "No" => "Nej",
-      ...>                 "Next" => "Næste",
-      ...>                 "Previous" => "Forrige",
-      ...>                 "Hello" => "Hej, {0}. Leder du efter {1}?"}
-      iex> parse_translation(translation, "da_DK")
-      %I18n2Elm.Types.Translation{
-          language_tag: "da_DK",
-          translations: [
-              {"TidHello", [{"Hej, ", 0},
-                            {". Leder du efter ", 1},
-                            {"?"}]},
-              {"TidNext", [{"Næste"}]},
-              {"TidNo", [{"Nej"}]},
-              {"TidPrevious", [{"Forrige"}]},
-              {"TidYes", [{"Ja"}]}
-      ]}
+  into a corresponding `Translation` struct.
   """
-  @spec parse_translation(map, String.t()) :: Translation.t()
-  def parse_translation(translation_node, language_tag) do
+  @spec parse_translation(map, String.t()) ::
+          {:ok, Translation.t()} | {:error, {:invalid_hole_numbering, String.t()}}
+  def parse_translation(translation_map, language_tag) do
     translations =
-      translation_node
+      translation_map
       |> Enum.to_list()
       |> Enum.sort()
       |> Enum.map(&check_for_holes/1)
       |> Enum.map(fn {key, value} -> {"Tid#{key}", value} end)
 
-    Translation.new(language_tag, translations)
+    with {:ok, _translation_ids} <- Result.traverse(translations, &validate_hole_numbering/1) do
+      {:ok, Translation.new(translations, language_tag)}
+    end
   end
 
+  # Splitting on `{` and `}` turns "Hej, {0}. Leder..." into the alternating
+  # list ["Hej, ", "0", ". Leder...", ...]; text and hole-number strings taking
+  # turns. Chunking that two at a time regroups each text run with the hole
+  # number immediately following it; the final chunk is a singleton exactly when
+  # the value ends in plain text (no trailing hole).
+  @spec check_for_holes({String.t(), String.t()}) :: {String.t(), [Types.hole_token()]}
   defp check_for_holes({key, text}) do
     text_with_holes =
       text
       |> split
       |> group
-      |> Enum.map(&tuplify/1)
-      |> Enum.map(&hole_to_number/1)
+      |> Enum.map(&to_hole_token/1)
 
     {key, text_with_holes}
   end
 
+  @spec split(String.t()) :: [String.t()]
   defp split(str), do: str |> String.split(~r/\{|\}/)
 
+  @spec group([String.t()]) :: [[String.t()]]
   defp group(lst), do: lst |> Enum.chunk_every(2)
 
-  defp tuplify(lst), do: lst |> List.to_tuple()
+  @spec to_hole_token([String.t()]) :: Types.hole_token()
+  defp to_hole_token([text]), do: {:text, text}
 
-  defp hole_to_number({text, hole}) do
+  defp to_hole_token([text, hole]) do
     hole_number = hole |> Integer.parse() |> elem(0)
-    {text, hole_number}
+    {:hole, text, hole_number}
   end
 
-  defp hole_to_number({text}), do: {text}
+  # Validates that a translation value's hole numbers are exactly 0..n-1 once
+  # sorted. This single check catches:
+  # - gaps (e.g. {0},{2}),
+  # - duplicates (e.g. {0} twice), and
+  # - non-zero starts (e.g. only {1})
+  # all at once, since each produces a sorted list that doesn't match the
+  # expected 0..n-1 range.
+  @spec validate_hole_numbering({String.t(), [Types.hole_token()]}) ::
+          {:ok, String.t()} | {:error, {:invalid_hole_numbering, String.t()}}
+  defp validate_hole_numbering({translation_id, hole_tokens}) do
+    hole_numbers =
+      hole_tokens
+      |> Enum.filter(&match?({:hole, _text, _hole_number}, &1))
+      |> Enum.map(fn {:hole, _text, hole_number} -> hole_number end)
+      |> Enum.sort()
+
+    ordering = Enum.to_list(0..(length(hole_numbers) - 1)//1)
+    contiguous_and_zero_indexed? = hole_numbers == ordering
+
+    if contiguous_and_zero_indexed? do
+      {:ok, translation_id}
+    else
+      {:error, {:invalid_hole_numbering, translation_id}}
+    end
+  end
 end

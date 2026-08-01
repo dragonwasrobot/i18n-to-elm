@@ -20,11 +20,20 @@ input/output examples.
 - `mix test test/parser_test.exs:36` — run a single test at a given line
 - `mix test --cover` — run tests with coverage (via ExCoveralls, configured as
   the `test_coverage` tool in `mix.exs`)
-- `mix credo` — static analysis/linting (config: `~> 1.7`, dev/test only)
+- `mix credo --strict` — static analysis/linting (config: `~> 1.7`, dev/test
+  only); no `.credo.exs` is checked in, so this runs Credo's full default
+  check list — `--strict` widens which of those get *reported* versus the
+  bare `mix credo`'s priority-filtered output, so always use `--strict`
 - `mix dialyzer` — type checking via Dialyxir
 - `mix format` — format `mix.exs`, `config/**`, `lib/**`, `test/**` per
   `.formatter.exs`
 - `mix docs` — generate ExDoc documentation
+- `./scripts/smoke_test.sh` — manual-handoff smoke test for `I18n2Elm.main/1`'s
+  CLI wiring: builds the escript and exercises it end-to-end (golden path,
+  help text, unknown flag, no files found, malformed JSON, missing reference
+  language file, read-only output dir), asserting on real exit codes — the
+  one class of check `mix test` structurally can't cover, since `main/1`
+  calls `exit/1` directly. Local-only, not wired into CI.
 - CI (`.github/workflows/elixir.yml`) runs `mix deps.get` then `mix test` on
   every push/PR to `master`, using the Elixir/Erlang versions pinned in
   `mise.local.toml`
@@ -38,17 +47,22 @@ module under `lib/`:
    args with `OptionParser` (only recognized flag: `--module-name`, default
    `"Translations"`), resolves the input path(s) to a flat list of `.json`
    files (recursing into directories), creates the output directory, then
-   calls `generate/2`, which wires `Parser` → `Printer` → file writes.
+   calls `generate/2`, which reads and JSON-decodes each file itself
+   (`read_translation_file/1`, Jason) before wiring `Parser` → `Printer` →
+   file writes — the only place file I/O happens, keeping `Parser` and
+   `Printer` pure.
 
-2. **`I18n2Elm.Parser` (`lib/parser.ex`)** — Reads each JSON file (Jason) and
-   turns it into a `%Translation{language_tag, translations}` struct. The
-   file's basename (minus `.json`) becomes the `language_tag`, e.g.
-   `da_DK.json` → `"da_DK"`. Each JSON key is prefixed `Tid` (e.g. `"Hello"`
-   → `"TidHello"`). Translation *values* are scanned for `{N}`-style
-   placeholders (`check_for_holes/1`) and turned into a list of tuples:
-   `{text}` for plain text runs, `{text, hole_number}` for text immediately
-   followed by a placeholder — this list is the intermediate representation
-   consumed by the printer.
+2. **`I18n2Elm.Parser` (`lib/parser.ex`)** — Pure: turns an already-decoded
+   JSON map plus a `language_tag` into a `%Translation{language_tag,
+   translations}` struct (`parse_translation/2`); it does no file I/O
+   itself — the caller derives `language_tag` from the file's basename
+   (minus `.json`), e.g. `da_DK.json` → `"da_DK"`. Each JSON key is
+   prefixed `Tid` (e.g. `"Hello"` → `"TidHello"`). Translation *values* are
+   scanned for `{N}`-style placeholders (`check_for_holes/1`) and turned
+   into a list of tagged tuples: `{:text, text}` for plain text runs,
+   `{:hole, text, hole_number}` for text immediately followed by a
+   placeholder — this list is the intermediate representation consumed by
+   the printer.
 
 3. **`I18n2Elm.Printer` (`lib/printer.ex`)** — Turns `Translation` structs
    into `{file_path, file_content}` pairs using EEx templates loaded from
@@ -59,16 +73,26 @@ module under `lib/`:
      exposing a `<lang><Country>Translations : TranslationId -> String`
      function (`print_translation/2`)
    - one `Ids.elm` file with the shared `TranslationId` union type, derived
-     specifically from the `en_US` translation file — **all input JSON files
-     must share identical key sets, and one of them must be `en_US.json`**,
-     since `print_ids/2` looks it up by `language_tag == "en_US"` and asserts
-     non-nil (`print_util/2` also uses `en_US` as the reference-free)
+     from the **reference translation** — **all input JSON files must share
+     identical key sets, and one of them must be for the reference language**
+     (`Types.reference_language_tag/0`, currently `en_US`); `generate/2`
+     validates this language is present before printing anything
+     (`validate_reference_language_present/1`), so `print_ids/2` and
+     `print_util/2` can assume it by construction
    - one `Util.elm` file with a `Language` union type, `parseLanguage`, and a
      `translate` dispatcher across all languages (`print_util/2`)
 
-4. **`I18n2Elm.Types` (`lib/types.ex`)** — Defines the intermediate structs
-   (via `TypedStruct`): `Translation` (parser output), plus `LanguageResource`,
-   `IdsResource`, `UtilResource` which model the printer's template inputs.
+4. **`I18n2Elm.Result` (`lib/result.ex`)** — `traverse/2`, a small shared
+   helper for composing functions that return `{:ok, _} | {:error, _}`:
+   applies a fallible function across a list, collecting every `:ok` value
+   in order, or stopping at the first `:error`. Used across `I18n2Elm` and
+   `Printer` wherever a list of files/translations must all succeed
+   together (e.g. reading every input file, writing every output file).
+
+5. **`I18n2Elm.Types` (`lib/types.ex`)** — Defines `Translation` (via
+   `TypedStruct`), the parser's output struct. The printer's template inputs
+   (language resource, IDs resource, util resource) are passed as plain maps
+   and lists rather than dedicated structs.
 
 Data flows one direction only: JSON → `Translation` structs (Parser) →
 `{file_path, content}` pairs (Printer) → disk (`I18n2Elm.generate/2`). There
@@ -167,7 +191,7 @@ These shape how code in this repo is written. They apply to every change.
 - **Name your conditionals.** Two forms: extract a complex boolean
   expression (e.g. `a and b or (c and not d)`) into a named local variable
   before branching on it; extract a complex predicate into a named local
-  function. See `Printer.two_tuple?/1` (`lib/printer.ex:95-96`) for the
+  function. See `Printer.hole?/1` (`lib/printer.ex:99-100`) for the
   latter — a one-line predicate function used from `Enum.filter/2` instead
   of an inline pattern-match expression.
 - **Always use multi-line `if/do/else/end`.** Never the `if cond, do: x, else:
@@ -232,7 +256,7 @@ The cycle for each behavior:
    judgment review, not a tool run. Common targets: missing `@spec`,
    functions approaching the ~50 LOC ceiling, missing named conditionals,
    declaration order, whitespace. Refactor before moving on.
-6. **Verification** — run `mix dialyzer`, `mix credo`, `mix format
+6. **Verification** — run `mix dialyzer`, `mix credo --strict`, `mix format
    --check-formatted`, and `mix test` before moving on. A green suite
    confirms the mechanics, not the Blue review; the two are distinct steps.
 7. **Stop and hand the diff back.** End the turn so the developer reads the
@@ -254,7 +278,7 @@ The cycle for each behavior:
 EEx templates under `priv/templates/`): skip the Red → Green cycle, but
 replace it with a handoff — describe the golden path and any relevant edge
 cases for the developer to exercise manually, and do not mark the work done
-until they confirm. `mix dialyzer`/`mix credo` still run.
+until they confirm. `mix dialyzer`/`mix credo --strict` still run.
 
 ## Refactor workflow
 
@@ -275,8 +299,8 @@ The cycle for a structured refactor:
    change before the next lands — that human read is the second review. A
    labeled change may span more than one edit; finish it, then yield. Never
    begin the next labeled change in the same response.
-5. Verify after each logical batch with `mix dialyzer`, `mix credo`, `mix
-   format --check-formatted`, and `mix test`.
+5. Verify after each logical batch with `mix dialyzer`, `mix credo --strict`,
+   `mix format --check-formatted`, and `mix test`.
 
 **Forbidden:**
 
@@ -284,8 +308,8 @@ The cycle for a structured refactor:
   previous one — finish a change, then yield the turn.
 - Batching unrelated edits into a single tool call.
 - Applying a fix that touches multiple principles in a single change.
-- Continuing past a `mix dialyzer`/`mix credo`/`mix format`/`mix test`
-  failure without surfacing it.
+- Continuing past a `mix dialyzer`/`mix credo --strict`/`mix format`/`mix
+  test` failure without surfacing it.
 
 **When automated verification isn't possible** (CLI wiring, EEx templates):
 replace the verify step with a handoff — describe the golden path and any
@@ -306,10 +330,12 @@ test "should parse a translation value with two holes" do
   # When parsing it for the da_DK language tag
   parsed = json |> Jason.decode!() |> Parser.parse_translation("da_DK")
 
-  # Then the value is split into text/hole tuples in order
+  # Then the value is split into tagged text/hole tuples in order
   assert parsed == %Translation{
            language_tag: "da_DK",
-           translations: [{"TidHello", [{"Hej, ", 0}, {". Leder du efter ", 1}, {"?"}]}]
+           translations: [
+             {"TidHello", [{:hole, "Hej, ", 0}, {:hole, ". Leder du efter ", 1}, {:text, "?"}]}
+           ]
          }
 end
 ```
@@ -356,12 +382,12 @@ rather than mocked adapters.
   CLI-user-facing text; `IO.binwrite` is for writing generated file
   contents.** See the split in `lib/i18n2elm.ex` and keep new code on the
   same sides of that line.
-- **Level assignment:** `debug` for argument/file-list dumps
-  (`lib/i18n2elm.ex:23,38`); `info` for milestones ("Created file: ...",
-  `lib/i18n2elm.ex:112`); `warn` for an anomaly the run survives, e.g. a
-  non-`.json` file encountered while walking an input directory (silently
-  skipped today by `resolve_all_paths/1`/`walk_directory/1`,
-  `lib/i18n2elm.ex:49-65`); `error` logged once at the dispatcher (`main/1`)
+- **Level assignment:** `debug` for argument/file-list/output dumps
+  (`lib/i18n2elm.ex:24,38,62`); `info` for milestones ("Created file: ...",
+  `lib/i18n2elm.ex:126`); `warning` for an anomaly the run survives, e.g. a
+  non-`.json` file encountered while walking an input directory (logged and
+  skipped by `expand_path/1`, `lib/i18n2elm.ex:80-95`); `error` logged once
+  at the dispatcher (`main/1`'s `with`/`else`, `lib/i18n2elm.ex:40-52`)
   immediately before `exit` — a malformed or unreadable input file is a hard
   stop under the `{:ok, _} | {:error, _}` convention, not a per-file skip,
   since every input file must share identical keys for the output to be

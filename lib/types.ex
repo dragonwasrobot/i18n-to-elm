@@ -7,12 +7,24 @@ defmodule I18n2Elm.Types do
   # Format: <language>_<country>, e.g. en_US
   @type language_tag :: String.t()
 
+  # A sequence of plain text, or a text sequence immediately followed by the
+  # `{N}`-style placeholder it introduces, turned into a positional Elm function
+  # parameter (`hole0`, `hole1`, ...).
+  @type hole_token :: {:text, String.t()} | {:hole, String.t(), non_neg_integer()}
+
   # {Translation key, Translation value}
-  @type translation :: {String.t(), String.t()}
+  @type translation :: {String.t(), [hole_token()]}
+
+  @doc """
+  The language tag treated as the reference/default language.
+  """
+  @spec reference_language_tag() :: language_tag
+  def reference_language_tag, do: "en_US"
 
   defmodule Translation do
     @moduledoc ~S"""
-    Represents a parsed translation file.
+    Represents a parsed translation file: a language tag plus its list of
+    translation key/value pairs.
 
     JSON:
 
@@ -29,38 +41,14 @@ defmodule I18n2Elm.Types do
 
         %Translation{language_tag: "da_DK",
                      translations: [
-                         {"TidHello", [{"Hej, ", 0},
-                                       {". Leder du efter ", 1},
-                                       {"?"}]},
-                         {"TidNext", [{"Næste"}]},
-                         {"TidNo", [{"Nej"}]},
-                         {"TidPrevious", [{"Forrige"}]}
-                         {"TidYes", [{"Ja"}]},
+                         {"TidHello", [{:hole, "Hej, ", 0},
+                                       {:hole, ". Leder du efter ", 1},
+                                       {:text, "?"}]},
+                         {"TidNext", [{:text, "Næste"}]},
+                         {"TidNo", [{:text, "Nej"}]},
+                         {"TidPrevious", [{:text, "Forrige"}]}
+                         {"TidYes", [{:text, "Ja"}]},
                      ]}
-
-    Elm code generated:
-
-    module Translations.DaDk exposing (daDkTranslations)
-
-    import Translations.Ids exposing (TranslationId(..))
-
-    daDkTranslations : TranslationId -> String
-    daDkTranslations tid =
-        case tid of
-            TidHello hole0 hole1 ->
-                "Hej, " ++ hole0 ++ ". Leder du efter " ++ hole1 ++ "?"
-
-            TidYes ->
-                "Ja"
-
-            TidNo ->
-                "Nej"
-
-            TidNext ->
-                "Næste"
-
-            TidPrevious ->
-                "Forrige"
     """
 
     alias I18n2Elm.Types
@@ -71,80 +59,9 @@ defmodule I18n2Elm.Types do
       field :translations, [Types.translation()], enforce: true
     end
 
-    @spec new(Types.language_tag(), [Types.translation()]) :: t
-    def new(language_tag, translations) do
+    @spec new([Types.translation()], Types.language_tag()) :: t()
+    def new(translations, language_tag) do
       %__MODULE__{language_tag: language_tag, translations: translations}
-    end
-  end
-
-  defmodule LanguageResource do
-    @moduledoc """
-    Represents a translation file for a single language.
-    """
-
-    alias I18n2Elm.Types
-    use TypedStruct
-
-    typedstruct do
-      field :module_name, String.t(), enforce: true
-      field :file_name, String.t(), enforce: true
-      field :translation_name, String.t(), enforce: true
-      field :translations, [Types.translation()], enforce: true
-    end
-
-    @spec new(String.t(), String.t(), String.t(), [Types.translation()]) :: t
-    def new(module_name, file_name, translation_name, translations) do
-      %__MODULE__{
-        module_name: module_name,
-        file_name: file_name,
-        translation_name: translation_name,
-        translations: translations
-      }
-    end
-  end
-
-  defmodule IdsResource do
-    @moduledoc """
-    Represents a file containing all translation IDs.
-    """
-
-    use TypedStruct
-
-    typedstruct do
-      field :module_name, String.t(), enforce: true
-      field :ids, [String.t()], enforce: true
-    end
-
-    @spec new(String.t(), [String.t()]) :: t
-    def new(module_name, ids) do
-      %__MODULE__{module_name: module_name, ids: ids}
-    end
-  end
-
-  defmodule UtilResource do
-    @moduledoc """
-    Represents a file util functions for parsing language tags and translation
-    IDs into translated values.
-    """
-
-    use TypedStruct
-
-    @type import :: %{file_name: String.t(), translation_name: String.t()}
-    @type language :: %{
-            string_value: String.t(),
-            type_value: String.t(),
-            translation_fun: String.t()
-          }
-
-    typedstruct do
-      field :module_name, String.t(), enforce: true
-      field :imports, [import], enforce: true
-      field :languages, [language], enforce: true
-    end
-
-    @spec new(String.t(), [import], [language]) :: t
-    def new(module_name, imports, languages) do
-      %__MODULE__{module_name: module_name, imports: imports, languages: languages}
     end
   end
 end
