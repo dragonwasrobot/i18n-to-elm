@@ -14,13 +14,17 @@ defmodule I18n2ElmTest do
 
     File.mkdir_p!(Path.join(output_dir, module_name))
 
+    on_exit(fn ->
+      File.rm_rf!(input_dir)
+      File.rm_rf!(output_dir)
+    end)
+
     {:ok, module_name: module_name, input_dir: input_dir, output_dir: output_dir}
   end
 
   test "should reject generation when missing reference translation", %{
     module_name: module_name,
-    input_dir: input_dir,
-    output_dir: _output_dir
+    input_dir: input_dir
   } do
     # Given a real input file for a non-reference language
     da_dk_path = Path.join(input_dir, "da_DK.json")
@@ -31,8 +35,6 @@ defmodule I18n2ElmTest do
 
     # Then generation fails, naming the missing reference language
     assert {:error, :missing_reference_translation} = result
-
-    File.rm_rf!(input_dir)
   end
 
   test "should reject generation when a translation's key set differs", %{
@@ -54,8 +56,5 @@ defmodule I18n2ElmTest do
 
     # Then generation fails, naming the file whose keys don't match
     assert {:error, {:mismatched_keys, "da_DK"}} = result
-
-    File.rm_rf!(input_dir)
-    File.rm_rf!(output_dir)
   end
 end

@@ -36,7 +36,7 @@ input/output examples.
   calls `exit/1` directly. Local-only, not wired into CI.
 - CI (`.github/workflows/elixir.yml`) runs `mix deps.get` then `mix test` on
   every push/PR to `master`, using the Elixir/Erlang versions pinned in
-  `mise.local.toml`
+  `mise.toml`
 
 ## Architecture
 
@@ -144,11 +144,11 @@ These shape how code in this repo is written. They apply to every change.
   ```
 - **Declaration order is top-down.** If function A depends on function B,
   declare A above B — same for private helpers. See
-  `Printer.print_translation/2` (`lib/printer.ex:46`), declared before the
-  private helpers it calls (`create_translation_pair/1`, `lib/printer.ex:72`).
+  `Printer.print_translation/2` (`lib/printer.ex:54`), declared before the
+  private helpers it calls (`create_translation_pair/1`, `lib/printer.ex:80`).
 - **Order parameters by relevance.** The value a function is fundamentally
   about leads; contextual criteria follow. `print_translation(translation,
-  module_name)` (`lib/printer.ex:46`) leads with its subject and trails with
+  module_name)` (`lib/printer.ex:54`) leads with its subject and trails with
   the injected naming context — mirror this order in new functions.
 - **Comments earn their place.** `@doc` on public functions describes *what*
   they do and *why* a caller would reach for them — not *how*; the body (and
@@ -165,8 +165,8 @@ These shape how code in this repo is written. They apply to every change.
   doing too much.
 - **Every function gets a `@spec`, public or private.** See `lib/printer.ex`,
   where specs exist even on private helpers like `create_file_path/2`
-  (`lib/printer.ex:174`). Add `@doc` on top where the behavior needs
-  explaining or a doctest helps (`lib/parser.ex:25-47`); a simple
+  (`lib/printer.ex:195`). Add `@doc` on top where the behavior needs
+  explaining or a usage example helps (`lib/parser.ex:14-21`); a simple
   pass-through function needs neither.
 - **Prefer short functions.** ~50 LOC is the soft ceiling. Treat approaching
   it as a signal the function is doing several things — extract named helpers
@@ -191,7 +191,7 @@ These shape how code in this repo is written. They apply to every change.
 - **Name your conditionals.** Two forms: extract a complex boolean
   expression (e.g. `a and b or (c and not d)`) into a named local variable
   before branching on it; extract a complex predicate into a named local
-  function. See `Printer.hole?/1` (`lib/printer.ex:99-100`) for the
+  function. See `Printer.hole?/1` (`lib/printer.ex:103-104`) for the
   latter — a one-line predicate function used from `Enum.filter/2` instead
   of an inline pattern-match expression.
 - **Always use multi-line `if/do/else/end`.** Never the `if cond, do: x, else:
@@ -200,11 +200,11 @@ These shape how code in this repo is written. They apply to every change.
 - **Destructure instead of repeating a path.** When a struct field is
   accessed more than twice in a function, destructure it in the function
   head rather than repeating `thing.field`. See `create_file_name/1` and
-  `create_translation_name/1` (`lib/printer.ex:184`, `:190`):
+  `create_translation_name/1` (`lib/printer.ex:207`, `:224`):
   `def create_file_name(%Translation{language_tag: language_tag})` instead of
   reaching into `translation.language_tag` repeatedly.
 - **Validate only at boundaries.** Trust internal callers. Validate at I/O
-  edges — `I18n2Elm.main/1`'s argument validation (`lib/i18n2elm.ex:27-43`)
+  edges — `I18n2Elm.main/1`'s argument validation (`lib/i18n2elm.ex:29-60`)
   is the existing example; don't re-check an input already validated at a
   boundary deeper in the call chain.
 - **Don't abstract until the second use.** Three similar lines is better than
@@ -228,7 +228,16 @@ These shape how code in this repo is written. They apply to every change.
   - `I18n2Elm.main/1` is the dispatcher: it unwraps the top-level `with`
     chain and, on `{:error, reason}`, prints a message and calls `exit/1` —
     extending the pattern already used for CLI-argument errors
-    (`lib/i18n2elm.ex:27-43`) to file/parse errors too.
+    (`lib/i18n2elm.ex:40-59`) to file/parse errors too.
+  - Don't assume an upstream caller already validated the input — a
+    function reachable on its own (a sibling caller, a unit test) must
+    handle its own bad-input case at the point it can fail, not trust that
+    validation happened elsewhere. Two crashes slipped in this way:
+    `Enum.find/2` returning `nil` and being dereferenced unchecked in
+    `Printer.print_ids/2`, and `Integer.parse/1` raising via a bare
+    `elem/2` on a non-numeric hole placeholder in `Parser.to_hole_token/1`
+    — both now return `{:error, _}` at the exact call site
+    (`lib/printer.ex:128-130`, `lib/parser.ex:58-67`).
 
 ## Feature workflow
 
@@ -340,19 +349,25 @@ test "should parse a translation value with two holes" do
 end
 ```
 
-`doctest` examples inside `@doc` blocks (`lib/parser.ex:25-47`) document
+Usage examples inside `@doc` blocks (`lib/parser.ex:14-21`) document
 behavior as plain input/output pairs and don't take Given/When/Then
-comments.
+comments. None of these are wired up as executable `doctest`s today — if one
+is made executable (an `iex>` prompt plus a `doctest ModuleName` call), it
+still follows this same plain-example shape, not Given/When/Then.
 
 **Assertion shape.** Assert on whole-struct equality (`assert parsed ==
-expected`, as in `test/parser_test.exs:33`). For the `{:ok, _} | {:error, _}`
+expected`, as in `test/parser_test.exs:34`). For the `{:ok, _} | {:error, _}`
 convention, unwrap by pattern-matching — `assert {:ok, value} = result` then
 assert on `value`, or `assert {:error, reason} = result` then assert on
 `reason`.
 
 **Orchestrator/integration coverage.** Cover `I18n2Elm.generate/2` (the
 orchestrator) via `test/e2e_test.exs`, against real temporary directories
-rather than mocked adapters.
+rather than mocked adapters. Register cleanup for those directories via
+`setup`'s `on_exit` (`test/e2e_test.exs:17-19`, `test/i18n2elm_test.exs:17-19`),
+not a manual `File.rm_rf!` at the bottom of the test body — an assertion
+failure earlier in the test skips a trailing cleanup call and leaks the
+directory, while `on_exit` runs regardless of outcome.
 
 **What to test.**
 
@@ -383,11 +398,11 @@ rather than mocked adapters.
   contents.** See the split in `lib/i18n2elm.ex` and keep new code on the
   same sides of that line.
 - **Level assignment:** `debug` for argument/file-list/output dumps
-  (`lib/i18n2elm.ex:24,38,62`); `info` for milestones ("Created file: ...",
-  `lib/i18n2elm.ex:126`); `warning` for an anomaly the run survives, e.g. a
+  (`lib/i18n2elm.ex:31,45,107`); `info` for milestones ("Created file: ...",
+  `lib/i18n2elm.ex:180`); `warning` for an anomaly the run survives, e.g. a
   non-`.json` file encountered while walking an input directory (logged and
-  skipped by `expand_path/1`, `lib/i18n2elm.ex:80-95`); `error` logged once
-  at the dispatcher (`main/1`'s `with`/`else`, `lib/i18n2elm.ex:40-52`)
+  skipped by `expand_path/1`, `lib/i18n2elm.ex:86-102`); `error` logged once
+  at the dispatcher (`main/1`'s `with`/`else`, `lib/i18n2elm.ex:40-59`)
   immediately before `exit` — a malformed or unreadable input file is a hard
   stop under the `{:ok, _} | {:error, _}` convention, not a per-file skip,
   since every input file must share identical keys for the output to be
