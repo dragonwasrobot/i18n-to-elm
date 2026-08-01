@@ -16,6 +16,7 @@ defmodule I18n2Elm do
   """
 
   require Logger
+  alias I18n2Elm.Infra.CLI
   alias I18n2Elm.{Parser, Printer, Result, Types}
   alias I18n2Elm.Types.Translation
 
@@ -30,14 +31,7 @@ defmodule I18n2Elm do
   def main(args) do
     Logger.debug("Arguments: #{inspect(args)}")
 
-    {options, paths, errors} = OptionParser.parse(args, strict: [module_name: :string])
-
-    if Enum.empty?(paths) do
-      IO.puts(@moduledoc)
-      exit(:normal)
-    end
-
-    with :ok <- validate_no_option_errors(errors),
+    with {:ok, paths, options} <- CLI.parse_args(args),
          {:ok, files} <- resolve_all_paths(paths),
          :ok <- validate_files_found(files, paths),
          {:ok, output_path} <- create_output_dir(options),
@@ -45,6 +39,10 @@ defmodule I18n2Elm do
       Logger.debug("Written files: #{inspect(written_files)}")
       exit(:normal)
     else
+      {:error, :no_paths_given} ->
+        IO.puts(@moduledoc)
+        exit(:normal)
+
       {:error, {:unknown_arguments, errors}} ->
         Logger.error("Found one or more errors in the supplied options: #{inspect(errors)}")
         exit({:unknown_arguments, errors})
@@ -58,11 +56,6 @@ defmodule I18n2Elm do
         exit(reason)
     end
   end
-
-  @spec validate_no_option_errors(OptionParser.errors()) ::
-          :ok | {:error, {:unknown_arguments, OptionParser.errors()}}
-  defp validate_no_option_errors([]), do: :ok
-  defp validate_no_option_errors(errors), do: {:error, {:unknown_arguments, errors}}
 
   @spec resolve_all_paths([Path.t()]) :: {:ok, [Path.t()]} | {:error, File.posix()}
   defp resolve_all_paths(paths) do
