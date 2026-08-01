@@ -97,6 +97,18 @@ defmodule I18n2ElmTest.Printer do
     assert ids_file == expected_ids_file
   end
 
+  test "should reject printing translation IDs when no translation is for the reference language",
+       %{translations: translations} do
+    # Given only a non-reference (da_DK) translation
+    translations_list = [translations.da]
+
+    # When printing the translation IDs module
+    result = Printer.print_ids(translations_list, "Translations")
+
+    # Then it fails instead of crashing on the missing reference translation
+    assert {:error, :missing_reference_translation} = result
+  end
+
   test "should print the available languages and corresponding dispatch functions", %{
     translations: translations
   } do

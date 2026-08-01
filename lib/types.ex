@@ -15,6 +15,9 @@ defmodule I18n2Elm.Types do
   # {Translation key, Translation value}
   @type translation :: {String.t(), [hole_token()]}
 
+  # {Output file path, file content}
+  @type printed_file :: {Path.t(), String.t()}
+
   @doc """
   The language tag treated as the reference/default language.
   """

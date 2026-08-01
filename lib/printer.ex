@@ -14,6 +14,8 @@ defmodule I18n2Elm.Printer do
   alias I18n2Elm.Types
   alias I18n2Elm.Types.Translation
 
+  @type reason :: :invalid_language_tag | :missing_reference_translation
+
   EEx.function_from_file(:defp, :language_template, @language_location, [
     :module_name,
     :file_name,
@@ -30,7 +32,7 @@ defmodule I18n2Elm.Printer do
   ])
 
   @spec print_translations([Translation.t()], String.t()) ::
-          {:ok, [{Path.t(), String.t()}]} | {:error, term()}
+          {:ok, [Types.printed_file()]} | {:error, reason()}
   def print_translations(translations, module_name \\ "") do
     with {:ok, printed_translations} <-
            Result.traverse(translations, &print_translation(&1, module_name)),
@@ -48,7 +50,7 @@ defmodule I18n2Elm.Printer do
   output depends on.
   """
   @spec print_translation(Translation.t(), String.t()) ::
-          {:ok, {Path.t(), String.t()}} | {:error, term()}
+          {:ok, Types.printed_file()} | {:error, :invalid_language_tag}
   def print_translation(translation, module_name \\ "") do
     with {:ok, file_name} <- create_file_name(translation),
          {:ok, translation_name} <- create_translation_name(translation) do
@@ -118,29 +120,33 @@ defmodule I18n2Elm.Printer do
   defp quote_translation({:text, text}), do: {"\"#{text}\""}
 
   @spec print_ids([Translation.t()], String.t()) ::
-          {:ok, {Path.t(), String.t()}} | {:error, term}
+          {:ok, Types.printed_file()} | {:error, :missing_reference_translation}
   def print_ids(translations, module_name \\ "") do
     file_name = "Ids"
     file_path = create_file_path(file_name, module_name)
 
-    en_us_translation =
-      translations
-      |> Enum.find(&reference_translation?/1)
+    case Enum.find(translations, &reference_translation?/1) do
+      nil ->
+        {:error, :missing_reference_translation}
 
-    ids =
-      en_us_translation.translations
-      |> Enum.map(fn {translation_id, translation} ->
-        arguments =
-          translation
-          |> Enum.filter(&hole?/1)
-          |> Enum.map_join(" ", fn _ -> "String" end)
+      reference_translation ->
+        ids = build_ids(reference_translation)
+        ids_file = ids_template(module_name, ids)
 
-        format_id_with_arguments(translation_id, arguments)
-      end)
+        {:ok, {file_path, ids_file}}
+    end
+  end
 
-    ids_file = ids_template(module_name, ids)
+  @spec build_ids(Translation.t()) :: [String.t()]
+  defp build_ids(%Translation{translations: translations}) do
+    Enum.map(translations, fn {translation_id, translation} ->
+      arguments =
+        translation
+        |> Enum.filter(&hole?/1)
+        |> Enum.map_join(" ", fn _ -> "String" end)
 
-    {:ok, {file_path, ids_file}}
+      format_id_with_arguments(translation_id, arguments)
+    end)
   end
 
   @spec reference_translation?(Translation.t()) :: boolean
@@ -149,7 +155,7 @@ defmodule I18n2Elm.Printer do
   end
 
   @spec print_util([Translation.t()], String.t()) ::
-          {:ok, {Path.t(), String.t()}} | {:error, term()}
+          {:ok, Types.printed_file()} | {:error, :invalid_language_tag}
   def print_util(translations, module_name \\ "") do
     file_name = "Util"
     file_path = create_file_path(file_name, module_name)
@@ -165,7 +171,7 @@ defmodule I18n2Elm.Printer do
   @spec by_language_tag(Translation.t(), Translation.t()) :: boolean()
   defp by_language_tag(t1, t2), do: t1.language_tag <= t2.language_tag
 
-  @spec build_import(Translation.t()) :: {:ok, map} | {:error, term}
+  @spec build_import(Translation.t()) :: {:ok, map} | {:error, :invalid_language_tag}
   defp build_import(translation) do
     with {:ok, file_name} <- create_file_name(translation),
          {:ok, translation_name} <- create_translation_name(translation) do
@@ -173,7 +179,7 @@ defmodule I18n2Elm.Printer do
     end
   end
 
-  @spec build_language(Translation.t()) :: {:ok, map()} | {:error, term()}
+  @spec build_language(Translation.t()) :: {:ok, map()} | {:error, :invalid_language_tag}
   defp build_language(%Translation{language_tag: language_tag} = translation) do
     with {:ok, translation_name} <- create_translation_name(translation) do
       {:ok,
