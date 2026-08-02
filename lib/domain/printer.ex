@@ -10,8 +10,9 @@ defmodule I18n2Elm.Domain.Printer do
   @util_location Path.join(@templates_location, "util.elm.eex")
 
   require Elixir.EEx
-  alias I18n2Elm.Domain.{Result, Types}
+  alias I18n2Elm.Domain.Types
   alias I18n2Elm.Domain.Types.Translation
+  alias I18n2Elm.Result
 
   @type reason :: :invalid_language_tag | :missing_reference_translation
 

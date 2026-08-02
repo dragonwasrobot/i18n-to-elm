@@ -4,8 +4,9 @@ defmodule I18n2Elm.Domain.Parser do
   e.g. printing Elm types and functions.
   """
 
-  alias I18n2Elm.Domain.{Result, Types}
+  alias I18n2Elm.Domain.Types
   alias I18n2Elm.Domain.Types.Translation
+  alias I18n2Elm.Result
 
   @type reason ::
           {:invalid_hole_numbering, String.t()} | {:invalid_hole_placeholder, String.t()}

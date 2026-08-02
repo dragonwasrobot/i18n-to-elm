@@ -16,8 +16,8 @@ input/output examples.
   `i18n2elm` executable in the project root (run with `MIX_ENV=prod mix build`
   for a release build)
 - `mix test` — run the full test suite (ExUnit)
-- `mix test test/parser_test.exs` — run a single test file
-- `mix test test/parser_test.exs:36` — run a single test at a given line
+- `mix test test/domain/parser_test.exs` — run a single test file
+- `mix test test/domain/parser_test.exs:36` — run a single test at a given line
 - `mix test --cover` — run tests with coverage (via ExCoveralls, configured as
   the `test_coverage` tool in `mix.exs`)
 - `mix credo --strict` — static analysis/linting (config: `~> 1.7`, dev/test
@@ -40,72 +40,97 @@ input/output examples.
 
 ## Architecture
 
-The pipeline is a straight-line 3-stage transform, each stage in its own
-module under `lib/`:
+The codebase is grouped into three concerns — **Main**, **Infra**, and
+**Domain** — following the functional-core/imperative-shell split described
+below.
 
-1. **`I18n2Elm` (`lib/i18n2elm.ex`)** — CLI entry point (`main/1`). Parses
-   args with `OptionParser` (only recognized flag: `--module-name`, default
-   `"Translations"`), resolves the input path(s) to a flat list of `.json`
-   files (recursing into directories), creates the output directory, then
-   calls `generate/2`, which reads and JSON-decodes each file itself
-   (`read_translation_file/1`, Jason) before wiring `Parser` → `Printer` →
-   file writes — the only place file I/O happens, keeping `Parser` and
-   `Printer` pure.
+1. **`I18n2Elm` (`lib/i18n2elm.ex`, Main)** — the thin entry point. `main/1`
+   parses CLI args via `Infra.CLI`, resolves/reads files via
+   `Infra.FileSystem`, then calls `generate/2`, which wires
+   `Infra.FileSystem`'s raw output through `Domain.Parser` →
+   `Domain.Validation` → `Domain.Printer` → `Infra.FileSystem.write_file/2`.
+   This is the only module that depends on both `Infra` and `Domain` — new
+   cross-cutting logic goes here, never smuggled into either layer.
 
-2. **`I18n2Elm.Parser` (`lib/parser.ex`)** — Pure: turns an already-decoded
-   JSON map plus a `language_tag` into a `%Translation{language_tag,
-   translations}` struct (`parse_translation/2`); it does no file I/O
-   itself — the caller derives `language_tag` from the file's basename
-   (minus `.json`), e.g. `da_DK.json` → `"da_DK"`. Each JSON key is
-   prefixed `Tid` (e.g. `"Hello"` → `"TidHello"`). Translation *values* are
-   scanned for `{N}`-style placeholders (`check_for_holes/1`) and turned
-   into a list of tagged tuples: `{:text, text}` for plain text runs,
-   `{:hole, text, hole_number}` for text immediately followed by a
-   placeholder — this list is the intermediate representation consumed by
-   the printer.
+2. **`I18n2Elm.Infra.CLI` (`lib/infra/cli.ex`)** — the argv-parsing
+   boundary. `parse_args/1` wraps `OptionParser.parse/2` (only recognized
+   flag: `--module-name`, default `"Translations"`) and returns
+   `{:ok, paths, options} | {:error, reason}`, folding both the "no paths
+   given" and "unknown flag" cases into one result so `main/1` dispatches
+   through a single `with/else`. Depends on nothing but `OptionParser`.
 
-3. **`I18n2Elm.Printer` (`lib/printer.ex`)** — Turns `Translation` structs
-   into `{file_path, file_content}` pairs using EEx templates loaded from
-   `priv/templates/` (`language.elm.eex`, `ids.elm.eex`, `util.elm.eex`; the
-   templates directory is configured via `config :i18n2elm,
-   templates_location:` in `config/config.exs`). Produces, per invocation:
+3. **`I18n2Elm.Infra.FileSystem` (`lib/infra/file_system.ex`)** — the
+   filesystem boundary: resolves CLI-provided paths to a flat list of
+   `.json` files (recursing into directories, `resolve_all_paths/1`), reads
+   and JSON-decodes each one (`read_json_files/1`), and writes generated
+   Elm files to disk (`write_file/2`). Hands decoded content back raw as
+   `{filename, map}` pairs rather than `Translation` structs — turning
+   JSON into a `Translation` is domain logic, so `FileSystem` depends only
+   on the shared `I18n2Elm.Result` helper, never on `Domain`.
+
+4. **`I18n2Elm.Domain.Parser` (`lib/domain/parser.ex`)** — pure: turns an
+   already-decoded JSON map plus a filename into a `%Translation{language_tag,
+   translations}` struct (`parse_translation/2`); the caller supplies
+   `language_tag`, derived from the file's basename (minus `.json`), e.g.
+   `da_DK.json` → `"da_DK"`. Each JSON key is prefixed `Tid` (e.g.
+   `"Hello"` → `"TidHello"`). Translation *values* are scanned for
+   `{N}`-style placeholders (`check_for_holes/1`) and turned into a list of
+   tagged tuples: `{:text, text}` for plain text runs, `{:hole, text,
+   hole_number}` for text immediately followed by a placeholder — this list
+   is the intermediate representation consumed by the printer.
+
+5. **`I18n2Elm.Domain.Printer` (`lib/domain/printer.ex`)** — turns
+   `Translation` structs into `{file_path, file_content}` pairs using EEx
+   templates loaded from `priv/templates/` (`language.elm.eex`,
+   `ids.elm.eex`, `util.elm.eex`; the templates directory is configured via
+   `config :i18n2elm, templates_location:` in `config/config.exs`).
+   Produces, per invocation:
    - one `<Lang><Country>.elm` file per input language (e.g. `DaDk.elm`)
      exposing a `<lang><Country>Translations : TranslationId -> String`
      function (`print_translation/2`)
    - one `Ids.elm` file with the shared `TranslationId` union type, derived
-     from the **reference translation** — **all input JSON files must share
-     identical key sets, and one of them must be for the reference language**
-     (`Types.reference_language_tag/0`, currently `en_US`); `generate/2`
-     validates this language is present before printing anything
-     (`validate_reference_language_present/1`), so `print_ids/2` and
-     `print_util/2` can assume it by construction
+     from the **reference translation** (`Types.reference_language_tag/0`,
+     currently `en_US`); `Domain.Validation` guarantees this language is
+     present and every file's keys match before printing, so `print_ids/2`
+     and `print_util/2` can assume both by construction
    - one `Util.elm` file with a `Language` union type, `parseLanguage`, and a
      `translate` dispatcher across all languages (`print_util/2`)
 
-4. **`I18n2Elm.Result` (`lib/result.ex`)** — `traverse/2`, a small shared
-   helper for composing functions that return `{:ok, _} | {:error, _}`:
-   applies a fallible function across a list, collecting every `:ok` value
-   in order, or stopping at the first `:error`. Used across `I18n2Elm` and
-   `Printer` wherever a list of files/translations must all succeed
-   together (e.g. reading every input file, writing every output file).
+6. **`I18n2Elm.Domain.Validation` (`lib/domain/validation.ex`)** — the
+   cross-translation business rules: **all input JSON files must share
+   identical key sets, and one of them must be for the reference language**
+   (`validate_reference_language_present/1`, `validate_matching_key_sets/1`).
+   `I18n2Elm.generate/2` runs both before handing translations to
+   `Domain.Printer`.
 
-5. **`I18n2Elm.Types` (`lib/types.ex`)** — Defines `Translation` (via
-   `TypedStruct`), the parser's output struct. The printer's template inputs
-   (language resource, IDs resource, util resource) are passed as plain maps
-   and lists rather than dedicated structs.
+7. **`I18n2Elm.Domain.Types` (`lib/domain/types.ex`)** — Defines
+   `Translation` (via `TypedStruct`), the parser's output struct, plus the
+   shared `language_tag`/`hole_token`/`printed_file` types. The printer's
+   template inputs (language resource, IDs resource, util resource) are
+   passed as plain maps and lists rather than dedicated structs.
 
-Data flows one direction only: JSON → `Translation` structs (Parser) →
-`{file_path, content}` pairs (Printer) → disk (`I18n2Elm.generate/2`). There
-is no Elm-side code in this repo; `examples/` holds a worked
-input-JSON/output-Elm pair used as a manual reference (mirrored in the
-README), not fixtures consumed by tests.
+8. **`I18n2Elm.Result` (`lib/result.ex`)** — `traverse/2`, a small shared,
+   dependency-free helper for composing functions that return `{:ok, _} |
+   {:error, _}`: applies a fallible function across a list, collecting
+   every `:ok` value in order, or stopping at the first `:error`. Sits
+   outside both `Infra` and `Domain` since both depend on it (reading every
+   input file, printing every translation, writing every output file)
+   without either layer depending on the other.
+
+Data flows one direction only: JSON → raw `{filename, map}` pairs
+(`Infra.FileSystem`) → `Translation` structs (`Domain.Parser`) →
+`{file_path, content}` pairs (`Domain.Printer`) → disk
+(`Infra.FileSystem.write_file/2`), all wired together by
+`I18n2Elm.generate/2`. There is no Elm-side code in this repo; `examples/`
+holds a worked input-JSON/output-Elm pair used as a manual reference
+(mirrored in the README), not fixtures consumed by tests.
 
 Elm identifier/file naming (e.g. `da_DK` → module `DaDk`, function
 `daDkTranslations`, type constructor `DA_DK`) is derived purely from the
-`language_tag` string split on `_`, in `Printer.create_file_name/1` and
-`Printer.create_translation_name/1` — the "hole" numbering in translation
-text must be contiguous and 0-indexed since it maps directly to Elm function
-parameters (`hole0`, `hole1`, ...).
+`language_tag` string split on `_`, in `Domain.Printer.create_file_name/1`
+and `Domain.Printer.create_translation_name/1` — the "hole" numbering in
+translation text must be contiguous and 0-indexed since it maps directly to
+Elm function parameters (`hole0`, `hole1`, ...).
 
 ## Guiding principles
 
@@ -144,12 +169,14 @@ These shape how code in this repo is written. They apply to every change.
   ```
 - **Declaration order is top-down.** If function A depends on function B,
   declare A above B — same for private helpers. See
-  `Printer.print_translation/2` (`lib/printer.ex:54`), declared before the
-  private helpers it calls (`create_translation_pair/1`, `lib/printer.ex:80`).
+  `Printer.print_translation/2` (`lib/domain/printer.ex:54`), declared before
+  the private helpers it calls (`create_translation_pair/1`,
+  `lib/domain/printer.ex:80`).
 - **Order parameters by relevance.** The value a function is fundamentally
   about leads; contextual criteria follow. `print_translation(translation,
-  module_name)` (`lib/printer.ex:54`) leads with its subject and trails with
-  the injected naming context — mirror this order in new functions.
+  module_name)` (`lib/domain/printer.ex:54`) leads with its subject and
+  trails with the injected naming context — mirror this order in new
+  functions.
 - **Comments earn their place.** `@doc` on public functions describes *what*
   they do and *why* a caller would reach for them — not *how*; the body (and
   any doctest) shows the how. A negation ("does X, not Y") earns its place
@@ -158,27 +185,39 @@ These shape how code in this repo is written. They apply to every change.
   design idea that only lived in a past conversation; the reader can't see
   the ghost being refuted, so cut it.
 - **Every module opens with a `@moduledoc` naming its concern.** One to three
-  sentences is the norm (`lib/parser.ex:2-5`, `lib/printer.ex:2-5`); expand to
-  a longer doc with examples only when the module has non-obvious usage, the
-  way `lib/i18n2elm.ex:2-16` documents CLI invocation. Writing the one-concern
-  sentence doubles as a cohesion test — if it's hard to write, the module is
-  doing too much.
-- **Every function gets a `@spec`, public or private.** See `lib/printer.ex`,
-  where specs exist even on private helpers like `create_file_path/2`
-  (`lib/printer.ex:195`). Add `@doc` on top where the behavior needs
-  explaining or a usage example helps (`lib/parser.ex:14-21`); a simple
-  pass-through function needs neither.
+  sentences is the norm (`lib/domain/parser.ex:2-5`,
+  `lib/domain/printer.ex:2-5`); expand to a longer doc with examples only
+  when the module has non-obvious usage, the way `lib/i18n2elm.ex:2-16`
+  documents CLI invocation. Writing the one-concern sentence doubles as a
+  cohesion test — if it's hard to write, the module is doing too much.
+- **Every function gets a `@spec`, public or private.** See
+  `lib/domain/printer.ex`, where specs exist even on private helpers like
+  `create_file_path/2` (`lib/domain/printer.ex:195`). Add `@doc` on top
+  where the behavior needs explaining or a usage example helps
+  (`lib/domain/parser.ex:14-21`); a simple pass-through function needs
+  neither.
 - **Prefer short functions.** ~50 LOC is the soft ceiling. Treat approaching
   it as a signal the function is doing several things — extract named helpers
   before adding more.
-- **Functional core, imperative shell.** `Printer` is the pure core — pure
-  transforms with no side effects; `I18n2Elm` (`lib/i18n2elm.ex`) is the
-  imperative shell, the only place file I/O belongs, and the boundary where
-  new cross-cutting logic goes — never smuggled into a module meant to stay
-  pure. `Logger` is the one exception to "no side effects in the core": it's
-  a cross-cutting singleton, callable directly via `require Logger` from any
-  module without threading it through function signatures or counting
-  against that module's purity.
+- **Functional core, imperative shell.** `Domain` (`lib/domain/*.ex`:
+  `Parser`, `Printer`, `Types`, `Validation`) is the pure core; `Infra`
+  (`lib/infra/*.ex`: `CLI`, `FileSystem`) is the imperative shell, the only
+  place argv parsing and file I/O happen. `I18n2Elm` (`lib/i18n2elm.ex`) is
+  the thin entry point that wires the two together — new cross-cutting
+  logic goes here, never smuggled into either layer.
+  - **Dependency direction is one-way and enforced by module, not just by
+    convention: `Infra` must never call `Domain`.** `Infra.FileSystem`
+    reads and JSON-decodes files but hands back raw `{filename, map}`
+    pairs rather than calling `Domain.Parser` itself — turning that map
+    into a `Translation` struct is `I18n2Elm.generate/2`'s job, since only
+    `I18n2Elm` is allowed to depend on both layers. `I18n2Elm.Result`
+    (`lib/result.ex`) is the one exception: a dependency-free list-traversal
+    helper both `Domain` and `Infra` use, sitting outside both rather than
+    creating a cross-layer dependency.
+  - `Logger` is the one exception to "no side effects in the core": it's a
+    cross-cutting singleton, callable directly via `require Logger` from any
+    module without threading it through function signatures or counting
+    against that module's purity.
 - **Keep one ubiquitous language across code and docs.** Every domain concept
   has exactly one name, used identically in specs, moduledocs, tests, and the
   README — the registry is the README's `§Vocabulary` section. Before naming
@@ -191,7 +230,7 @@ These shape how code in this repo is written. They apply to every change.
 - **Name your conditionals.** Two forms: extract a complex boolean
   expression (e.g. `a and b or (c and not d)`) into a named local variable
   before branching on it; extract a complex predicate into a named local
-  function. See `Printer.hole?/1` (`lib/printer.ex:103-104`) for the
+  function. See `Printer.hole?/1` (`lib/domain/printer.ex:103-104`) for the
   latter — a one-line predicate function used from `Enum.filter/2` instead
   of an inline pattern-match expression.
 - **Always use multi-line `if/do/else/end`.** Never the `if cond, do: x, else:
@@ -200,13 +239,13 @@ These shape how code in this repo is written. They apply to every change.
 - **Destructure instead of repeating a path.** When a struct field is
   accessed more than twice in a function, destructure it in the function
   head rather than repeating `thing.field`. See `create_file_name/1` and
-  `create_translation_name/1` (`lib/printer.ex:207`, `:224`):
+  `create_translation_name/1` (`lib/domain/printer.ex:207`, `:224`):
   `def create_file_name(%Translation{language_tag: language_tag})` instead of
   reaching into `translation.language_tag` repeatedly.
 - **Validate only at boundaries.** Trust internal callers. Validate at I/O
-  edges — `I18n2Elm.main/1`'s argument validation (`lib/i18n2elm.ex:29-60`)
-  is the existing example; don't re-check an input already validated at a
-  boundary deeper in the call chain.
+  edges — `I18n2Elm.Infra.CLI.parse_args/1`'s argument validation
+  (`lib/infra/cli.ex:11-23`) is the existing example; don't re-check an
+  input already validated at a boundary deeper in the call chain.
 - **Don't abstract until the second use.** Three similar lines is better than
   a premature abstraction. Delete duplication when it appears the second
   time, not in anticipation.
@@ -228,7 +267,7 @@ These shape how code in this repo is written. They apply to every change.
   - `I18n2Elm.main/1` is the dispatcher: it unwraps the top-level `with`
     chain and, on `{:error, reason}`, prints a message and calls `exit/1` —
     extending the pattern already used for CLI-argument errors
-    (`lib/i18n2elm.ex:40-59`) to file/parse errors too.
+    (`lib/i18n2elm.ex:34-58`) to file/parse errors too.
   - Don't assume an upstream caller already validated the input — a
     function reachable on its own (a sibling caller, a unit test) must
     handle its own bad-input case at the point it can fail, not trust that
@@ -237,7 +276,7 @@ These shape how code in this repo is written. They apply to every change.
     `Printer.print_ids/2`, and `Integer.parse/1` raising via a bare
     `elem/2` on a non-numeric hole placeholder in `Parser.to_hole_token/1`
     — both now return `{:error, _}` at the exact call site
-    (`lib/printer.ex:128-130`, `lib/parser.ex:58-67`).
+    (`lib/domain/printer.ex:128-130`, `lib/domain/parser.ex:58-67`).
 
 ## Feature workflow
 
@@ -349,14 +388,14 @@ test "should parse a translation value with two holes" do
 end
 ```
 
-Usage examples inside `@doc` blocks (`lib/parser.ex:14-21`) document
+Usage examples inside `@doc` blocks (`lib/domain/parser.ex:14-21`) document
 behavior as plain input/output pairs and don't take Given/When/Then
 comments. None of these are wired up as executable `doctest`s today — if one
 is made executable (an `iex>` prompt plus a `doctest ModuleName` call), it
 still follows this same plain-example shape, not Given/When/Then.
 
 **Assertion shape.** Assert on whole-struct equality (`assert parsed ==
-expected`, as in `test/parser_test.exs:34`). For the `{:ok, _} | {:error, _}`
+expected`, as in `test/domain/parser_test.exs:34`). For the `{:ok, _} | {:error, _}`
 convention, unwrap by pattern-matching — `assert {:ok, value} = result` then
 assert on `value`, or `assert {:error, reason} = result` then assert on
 `reason`.
@@ -395,18 +434,20 @@ directory, while `on_exit` runs regardless of outcome.
 
 - **`Logger` (via `require Logger`) is for diagnostics; `IO.puts` is for
   CLI-user-facing text; `IO.binwrite` is for writing generated file
-  contents.** See the split in `lib/i18n2elm.ex` and keep new code on the
-  same sides of that line.
-- **Level assignment:** `debug` for argument/file-list/output dumps
-  (`lib/i18n2elm.ex:31,45,107`); `info` for milestones ("Created file: ...",
-  `lib/i18n2elm.ex:180`); `warning` for an anomaly the run survives, e.g. a
-  non-`.json` file encountered while walking an input directory (logged and
-  skipped by `expand_path/1`, `lib/i18n2elm.ex:86-102`); `error` logged once
-  at the dispatcher (`main/1`'s `with`/`else`, `lib/i18n2elm.ex:40-59`)
-  immediately before `exit` — a malformed or unreadable input file is a hard
-  stop under the `{:ok, _} | {:error, _}` convention, not a per-file skip,
-  since every input file must share identical keys for the output to be
-  valid.
+  contents.** See the split in `lib/i18n2elm.ex` (`Logger` + `IO.puts`) and
+  `lib/infra/file_system.ex` (`Logger` + `IO.binwrite`), and keep new code
+  on the same sides of that line.
+- **Level assignment:** `debug` for argument/output dumps
+  (`lib/i18n2elm.ex:32,39`) and file-list dumps
+  (`lib/infra/file_system.ex:54`); `info` for milestones ("Created file:
+  ...", `lib/infra/file_system.ex:76`); `warning` for an anomaly the run
+  survives, e.g. a non-`.json` file encountered while walking an input
+  directory (logged and skipped by `expand_path/1`,
+  `lib/infra/file_system.ex:34-49`); `error` logged once at the dispatcher
+  (`main/1`'s `with`/`else`, `lib/i18n2elm.ex:34-58`) immediately before
+  `exit` — a malformed or unreadable input file is a hard stop under the
+  `{:ok, _} | {:error, _}` convention, not a per-file skip, since every
+  input file must share identical keys for the output to be valid.
 - **Message shape:**
 
   ```elixir

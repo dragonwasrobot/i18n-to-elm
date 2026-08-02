@@ -1,4 +1,4 @@
-defmodule I18n2Elm.Domain.Result do
+defmodule I18n2Elm.Result do
   @moduledoc """
   Helpers for composing functions that return `{:ok, _} | {:error, _}`.
   """
