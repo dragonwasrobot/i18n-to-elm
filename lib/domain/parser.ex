@@ -1,12 +1,11 @@
-defmodule I18n2Elm.Parser do
+defmodule I18n2Elm.Domain.Parser do
   @moduledoc """
   Parses JSON i18n files into an intermediate representation to be used for
   e.g. printing Elm types and functions.
   """
 
-  alias I18n2Elm.Result
-  alias I18n2Elm.Types
-  alias I18n2Elm.Types.Translation
+  alias I18n2Elm.Domain.{Result, Types}
+  alias I18n2Elm.Domain.Types.Translation
 
   @type reason ::
           {:invalid_hole_numbering, String.t()} | {:invalid_hole_placeholder, String.t()}

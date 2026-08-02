@@ -1,4 +1,4 @@
-defmodule I18n2Elm.Types do
+defmodule I18n2Elm.Domain.Types do
   @moduledoc """
   Specifies the main Elixir types used for describing the
   intermediate representations of i18n resources.
@@ -54,7 +54,7 @@ defmodule I18n2Elm.Types do
                      ]}
     """
 
-    alias I18n2Elm.Types
+    alias I18n2Elm.Domain.Types
     use TypedStruct
 
     typedstruct do
