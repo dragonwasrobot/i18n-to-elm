@@ -5,16 +5,15 @@ defmodule I18n2Elm.Domain.Printer do
   """
 
   @templates_location Application.compile_env(:i18n2elm, :templates_location)
-  @language_location Path.join(@templates_location, "language.elm.eex")
-  @ids_location Path.join(@templates_location, "ids.elm.eex")
-  @util_location Path.join(@templates_location, "util.elm.eex")
 
   require Elixir.EEx
-  alias I18n2Elm.Domain.{Result, Types}
+  alias I18n2Elm.Domain.Types
   alias I18n2Elm.Domain.Types.Translation
+  alias I18n2Elm.Result
 
   @type reason :: :invalid_language_tag | :missing_reference_translation
 
+  @language_location Path.join(@templates_location, "language.elm.eex")
   EEx.function_from_file(:defp, :language_template, @language_location, [
     :module_name,
     :file_name,
@@ -22,16 +21,24 @@ defmodule I18n2Elm.Domain.Printer do
     :translations
   ])
 
+  @ids_location Path.join(@templates_location, "ids.elm.eex")
   EEx.function_from_file(:defp, :ids_template, @ids_location, [:module_name, :ids])
 
+  @util_location Path.join(@templates_location, "util.elm.eex")
   EEx.function_from_file(:defp, :util_template, @util_location, [
     :module_name,
     :imports,
     :languages
   ])
 
+  @doc """
+  Prints Elm translation modules, `<Lang><Country>.elm` for a full set of
+  languages, also produces the shared `Ids.elm` and `Utils.elm` modules that the
+  language modules depend on.
+  """
   @spec print_translations([Translation.t()], String.t()) ::
-          {:ok, [Types.printed_file()]} | {:error, reason()}
+          {:ok, [Types.printed_file()]}
+          | {:error, reason()}
   def print_translations(translations, module_name) do
     with {:ok, printed_translations} <-
            Result.traverse(translations, &print_translation(&1, module_name)),
@@ -43,13 +50,11 @@ defmodule I18n2Elm.Domain.Printer do
 
   @doc """
   Prints one language's Elm translation module: the `<Lang><Country>.elm` file
-  exposing a `<lang><Country>Translations` function. Reach for
-  `print_translations/2` instead when printing a full set of languages, since
-  it also produces the shared `Ids.elm` and `Util.elm` files this module's
-  output depends on.
+  exposing a `<lang><Country>Translations` function.
   """
   @spec print_translation(Translation.t(), String.t()) ::
-          {:ok, Types.printed_file()} | {:error, :invalid_language_tag}
+          {:ok, Types.printed_file()}
+          | {:error, :invalid_language_tag}
   def print_translation(translation, module_name) do
     with {:ok, file_name} <- create_file_name(translation),
          {:ok, translation_name} <- create_translation_name(translation) do
@@ -119,7 +124,8 @@ defmodule I18n2Elm.Domain.Printer do
   defp quote_translation({:text, text}), do: {"\"#{text}\""}
 
   @spec print_ids([Translation.t()], String.t()) ::
-          {:ok, Types.printed_file()} | {:error, :missing_reference_translation}
+          {:ok, Types.printed_file()}
+          | {:error, :missing_reference_translation}
   def print_ids(translations, module_name) do
     file_name = "Ids"
     file_path = create_file_path(file_name, module_name)
@@ -148,13 +154,14 @@ defmodule I18n2Elm.Domain.Printer do
     end)
   end
 
-  @spec reference_translation?(Translation.t()) :: boolean
+  @spec reference_translation?(Translation.t()) :: boolean()
   defp reference_translation?(%Translation{language_tag: language_tag}) do
     language_tag == Types.reference_language_tag()
   end
 
   @spec print_util([Translation.t()], String.t()) ::
-          {:ok, Types.printed_file()} | {:error, :invalid_language_tag}
+          {:ok, Types.printed_file()}
+          | {:error, :invalid_language_tag}
   def print_util(translations, module_name) do
     file_name = "Util"
     file_path = create_file_path(file_name, module_name)
@@ -181,12 +188,13 @@ defmodule I18n2Elm.Domain.Printer do
   @spec build_language(Translation.t()) :: {:ok, map()} | {:error, :invalid_language_tag}
   defp build_language(%Translation{language_tag: language_tag} = translation) do
     with {:ok, translation_name} <- create_translation_name(translation) do
-      {:ok,
-       %{
-         string_value: language_tag,
-         type_value: String.upcase(language_tag),
-         translation_fun: translation_name
-       }}
+      language = %{
+        string_value: language_tag,
+        type_value: String.upcase(language_tag),
+        translation_fun: translation_name
+      }
+
+      {:ok, language}
     end
   end
 
@@ -210,7 +218,8 @@ defmodule I18n2Elm.Domain.Printer do
   end
 
   @spec split_language_tag(String.t()) ::
-          {:ok, {String.t(), String.t()}} | {:error, :invalid_language_tag}
+          {:ok, {String.t(), String.t()}}
+          | {:error, :invalid_language_tag}
   defp split_language_tag(language_tag) do
     case String.split(language_tag, "_") do
       [language, country] -> {:ok, {language, country}}
@@ -219,7 +228,8 @@ defmodule I18n2Elm.Domain.Printer do
   end
 
   @spec create_translation_name(Translation.t()) ::
-          {:ok, String.t()} | {:error, :invalid_language_tag}
+          {:ok, String.t()}
+          | {:error, :invalid_language_tag}
   defp create_translation_name(%Translation{language_tag: language_tag}) do
     with {:ok, {language, country}} <- split_language_tag(language_tag) do
       {:ok, language <> String.capitalize(country) <> "Translations"}

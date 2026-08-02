@@ -1,14 +1,34 @@
 defmodule I18n2Elm.Domain.Parser do
   @moduledoc """
-  Parses JSON i18n files into an intermediate representation to be used for
-  e.g. printing Elm types and functions.
+  Parses JSON i18n files into an intermediate representation, validating the
+  correctness in the process, to be used for e.g. printing Elm types and
+  functions.
   """
 
-  alias I18n2Elm.Domain.{Result, Types}
+  alias I18n2Elm.Domain.Types
   alias I18n2Elm.Domain.Types.Translation
+  alias I18n2Elm.Result
 
   @type reason ::
-          {:invalid_hole_numbering, String.t()} | {:invalid_hole_placeholder, String.t()}
+          {:invalid_hole_numbering, String.t()}
+          | {:invalid_hole_placeholder, String.t()}
+          | :missing_reference_translation
+          | {:mismatched_keys, Types.language_tag()}
+
+  @spec parse_translations([{String.t(), map()}]) ::
+          {:ok, [Translation.t()]} | {:error, reason()}
+  def parse_translations(raw_translations) do
+    parser_result =
+      Result.traverse(raw_translations, fn {filename, decoded} ->
+        parse_translation(decoded, filename)
+      end)
+
+    with {:ok, translations} <- parser_result,
+         :ok <- validate_reference_language_present(translations),
+         :ok <- validate_matching_key_sets(translations) do
+      {:ok, translations}
+    end
+  end
 
   @doc ~S"""
   Parses a map of translations of the format:
@@ -56,7 +76,8 @@ defmodule I18n2Elm.Domain.Parser do
   defp group(lst), do: lst |> Enum.chunk_every(2)
 
   @spec to_hole_token([String.t()]) ::
-          {:ok, Types.hole_token()} | {:error, :invalid_hole_placeholder}
+          {:ok, Types.hole_token()}
+          | {:error, :invalid_hole_placeholder}
   defp to_hole_token([text]), do: {:ok, {:text, text}}
 
   defp to_hole_token([text, hole]) do
@@ -74,7 +95,8 @@ defmodule I18n2Elm.Domain.Parser do
   # all at once, since each produces a sorted list that doesn't match the
   # expected 0..n-1 range.
   @spec validate_hole_numbering({String.t(), [Types.hole_token()]}) ::
-          {:ok, String.t()} | {:error, reason()}
+          {:ok, String.t()}
+          | {:error, reason()}
   defp validate_hole_numbering({translation_id, hole_tokens}) do
     hole_numbers =
       hole_tokens
@@ -90,5 +112,44 @@ defmodule I18n2Elm.Domain.Parser do
     else
       {:error, {:invalid_hole_numbering, translation_id}}
     end
+  end
+
+  @spec validate_reference_language_present([Translation.t()]) ::
+          :ok | {:error, :missing_reference_translation}
+  defp validate_reference_language_present(translations) do
+    if Enum.any?(translations, &reference_translation?/1) do
+      :ok
+    else
+      {:error, :missing_reference_translation}
+    end
+  end
+
+  @spec validate_matching_key_sets([Translation.t()]) ::
+          :ok | {:error, {:mismatched_keys, Types.language_tag()}}
+  defp validate_matching_key_sets(translations) do
+    reference_keys =
+      translations
+      |> Enum.find(&reference_translation?/1)
+      |> translation_keys()
+
+    translations
+    |> Enum.reject(&reference_translation?/1)
+    |> Enum.find(&(not MapSet.equal?(translation_keys(&1), reference_keys)))
+    |> case do
+      nil -> :ok
+      %Translation{language_tag: language_tag} -> {:error, {:mismatched_keys, language_tag}}
+    end
+  end
+
+  @spec reference_translation?(Translation.t()) :: boolean
+  defp reference_translation?(%Translation{language_tag: language_tag}) do
+    language_tag == Types.reference_language_tag()
+  end
+
+  @spec translation_keys(Translation.t()) :: MapSet.t(String.t())
+  defp translation_keys(%Translation{translations: translations}) do
+    translations
+    |> Enum.map(fn {translation_id, _hole_tokens} -> translation_id end)
+    |> MapSet.new()
   end
 end

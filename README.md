@@ -8,9 +8,14 @@ The tool is meant as an aid if you are using a centralized service to handle the
 translation of your i18n resources but then need to import the i18n keys/values
 into your Elm application in a type-safe way.
 
-> Note: If you like code that generates code, you might
-> like [my other project](https://github.com/dragonwasrobot/json-schema-to-elm)
-> which turns JSON-schema specs into Elm types+decoders+encoders.
+> **Note:** If you like code that generates code, you might like [my other
+> project](https://github.com/dragonwasrobot/json-schema-to-elm) which turns
+> JSON-schema specs into Elm types + decoders + encoders.
+
+> **Note:** while this repository does contain a `CLAUDE.md` file, tools like
+> Claude Code are also used for AI-Assistance and always within a tight feedback
+> loop with a human. Code in this repository is never generated in bulk by an
+> agent, and never committed without thorough review by a human.
 
 ## Setup
 
