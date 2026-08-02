@@ -1,4 +1,4 @@
-defmodule I18n2Elm.Printer do
+defmodule I18n2Elm.Domain.Printer do
   @moduledoc """
   Prints an intermediate representation of a JSON i18n file into a series
   of elm types and functions.
@@ -10,9 +10,8 @@ defmodule I18n2Elm.Printer do
   @util_location Path.join(@templates_location, "util.elm.eex")
 
   require Elixir.EEx
-  alias I18n2Elm.Result
-  alias I18n2Elm.Types
-  alias I18n2Elm.Types.Translation
+  alias I18n2Elm.Domain.{Result, Types}
+  alias I18n2Elm.Domain.Types.Translation
 
   @type reason :: :invalid_language_tag | :missing_reference_translation
 

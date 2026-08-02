@@ -16,9 +16,9 @@ defmodule I18n2Elm do
   """
 
   require Logger
+  alias I18n2Elm.Domain.{Parser, Printer, Result, Types}
+  alias I18n2Elm.Domain.Types.Translation
   alias I18n2Elm.Infra.CLI
-  alias I18n2Elm.{Parser, Printer, Result, Types}
-  alias I18n2Elm.Types.Translation
 
   @type reason ::
           File.posix()

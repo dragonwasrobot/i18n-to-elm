@@ -1,8 +1,8 @@
 defmodule I18n2ElmTest.Parser do
   use ExUnit.Case
 
-  alias I18n2Elm.Parser
-  alias I18n2Elm.Types.Translation
+  alias I18n2Elm.Domain.Parser
+  alias I18n2Elm.Domain.Types.Translation
 
   test "should parse a translation map into a translation struct" do
     # Given a translation map with plain values and one holed value

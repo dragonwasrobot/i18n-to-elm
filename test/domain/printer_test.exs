@@ -1,7 +1,7 @@
 defmodule I18n2ElmTest.Printer do
   use ExUnit.Case
 
-  alias I18n2Elm.{Printer, Types}
+  alias I18n2Elm.Domain.{Printer, Types}
   alias Types.Translation
 
   setup do
