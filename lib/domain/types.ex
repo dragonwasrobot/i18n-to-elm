@@ -7,13 +7,13 @@ defmodule I18n2Elm.Domain.Types do
   # Format: <language>_<country>, e.g. en_US
   @type language_tag :: String.t()
 
+  # {Translation key, Translation value}
+  @type translation :: {String.t(), [hole_token()]}
+
   # A sequence of plain text, or a text sequence immediately followed by the
   # `{N}`-style placeholder it introduces, turned into a positional Elm function
   # parameter (`hole0`, `hole1`, ...).
   @type hole_token :: {:text, String.t()} | {:hole, String.t(), non_neg_integer()}
-
-  # {Translation key, Translation value}
-  @type translation :: {String.t(), [hole_token()]}
 
   # {Output file path, file content}
   @type printed_file :: {Path.t(), String.t()}
@@ -29,7 +29,7 @@ defmodule I18n2Elm.Domain.Types do
     Represents a parsed translation file: a language tag plus its list of
     translation key/value pairs.
 
-    JSON:
+    JSON representation:
 
         # da_DK.json
         {
