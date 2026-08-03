@@ -1,5 +1,5 @@
 defmodule I18n2ElmTest.Printer do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias I18n2Elm.Domain.{Printer, Types}
   alias Types.Translation
@@ -9,7 +9,8 @@ defmodule I18n2ElmTest.Printer do
       da: %Translation{
         language_tag: "da_DK",
         translations: [
-          {"TidHello", [{:hole, "Hej, ", 1}, {:hole, ". Leder du efter ", 0}, {:text, "?"}]},
+          {"TidHello",
+           [{:text, "Hej, "}, {:hole, 1}, {:text, ". Leder du efter "}, {:hole, 0}, {:text, "?"}]},
           {"TidNext", [{:text, "Næste"}]},
           {"TidNo", [{:text, "Nej"}]},
           {"TidPrevious", [{:text, "Forrige"}]},
@@ -20,7 +21,13 @@ defmodule I18n2ElmTest.Printer do
         language_tag: "en_US",
         translations: [
           {"TidHello",
-           [{:hole, "Hello, ", 1}, {:hole, "It is ", 0}, {:text, "you are looking for?"}]},
+           [
+             {:text, "Hello, "},
+             {:hole, 1},
+             {:text, "It is "},
+             {:hole, 0},
+             {:text, "you are looking for?"}
+           ]},
           {"TidNext", [{:text, "Next"}]},
           {"TidNo", [{:text, "No"}]},
           {"TidPrevious", [{:text, "Previous"}]},

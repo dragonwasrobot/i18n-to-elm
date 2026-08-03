@@ -74,10 +74,10 @@ below.
    `language_tag`, derived from the file's basename (minus `.json`), e.g.
    `da_DK.json` → `"da_DK"`. Each JSON key is prefixed `Tid` (e.g.
    `"Hello"` → `"TidHello"`). Translation *values* are scanned for
-   `{N}`-style placeholders (`check_for_holes/1`) and turned into a list of
-   tagged tuples: `{:text, text}` for plain text runs, `{:hole, text,
-   hole_number}` for text immediately followed by a placeholder — this list
-   is the intermediate representation consumed by the printer.
+   `{N}`-style placeholders (`parse_value/1`, via `tokenize/2` and
+   `tokenize_segment/2`) and turned into a list of tagged tuples: `{:text,
+   text}` for plain text runs, `{:hole, hole_number}` for a placeholder —
+   this list is the intermediate representation consumed by the printer.
    `parse_translations/1` is the module's other entry point: it parses a
    full list of `{filename, map}` pairs via `parse_translation/2` and then
    enforces the cross-translation invariants — **all input JSON files must
@@ -106,7 +106,7 @@ below.
 
 6. **`I18n2Elm.Domain.Types` (`lib/domain/types.ex`)** — Defines
    `Translation` (via `TypedStruct`), the parser's output struct, plus the
-   shared `language_tag`/`hole_token`/`printed_file` types. The printer's
+   shared `language_tag`/`translation_token`/`printed_file` types. The printer's
    template inputs (language resource, IDs resource, util resource) are
    passed as plain maps and lists rather than dedicated structs.
 
@@ -235,6 +235,20 @@ These shape how code in this repo is written. They apply to every change.
   function. See `Printer.hole?/1` (`lib/domain/printer.ex:103-104`) for the
   latter — a one-line predicate function used from `Enum.filter/2` instead
   of an inline pattern-match expression.
+- **Name your pipelines.** A multi-step `|>` chain (3+ pipe operators, not
+  line count) embedded inside a function that also does something else (a
+  `with`, an `if`, another computation) is a decomposition signal on its
+  own. Two forms, same choice as "Name your conditionals": bind it to a
+  well-named local variable when it's shorter (2 steps) and just chains
+  already-named helpers; extract it into a named, separately-specced helper
+  at 3+ steps, or sooner if it implements real logic of its own (new
+  pattern matches, new predicates, a result worth a `@spec`). See
+  `Parser.tokenize/2`
+  (`lib/domain/parser.ex:71-76`, pulled out of `parse_value/1`) and
+  `Parser.extract_hole_numbers/1` (`lib/domain/parser.ex:120-125`, pulled out
+  of `validate_hole_numbering/2`) for the extraction form; the local-variable
+  form is already in use at `reference_keys` in
+  `Parser.validate_matching_key_sets/1` (`lib/domain/parser.ex:140-142`).
 - **Always use multi-line `if/do/else/end`.** Never the `if cond, do: x, else:
   y` keyword-list form for anything beyond a trivial single expression — it
   keeps conditionals easy to extend and diff.
@@ -276,9 +290,9 @@ These shape how code in this repo is written. They apply to every change.
     validation happened elsewhere. Two crashes slipped in this way:
     `Enum.find/2` returning `nil` and being dereferenced unchecked in
     `Printer.print_ids/2`, and `Integer.parse/1` raising via a bare
-    `elem/2` on a non-numeric hole placeholder in `Parser.to_hole_token/1`
+    `elem/2` on a non-numeric hole placeholder in `Parser.tokenize_segment/2`
     — both now return `{:error, _}` at the exact call site
-    (`lib/domain/printer.ex:128-130`, `lib/domain/parser.ex:58-67`).
+    (`lib/domain/printer.ex:122-136`, `lib/domain/parser.ex:91-96`).
 
 ## Feature workflow
 
