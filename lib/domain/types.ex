@@ -8,12 +8,10 @@ defmodule I18n2Elm.Domain.Types do
   @type language_tag :: String.t()
 
   # {Translation key, Translation value}
-  @type translation :: {String.t(), [hole_token()]}
+  @type translation :: {String.t(), [translation_token()]}
 
-  # A sequence of plain text, or a text sequence immediately followed by the
-  # `{N}`-style placeholder it introduces, turned into a positional Elm function
-  # parameter (`hole0`, `hole1`, ...).
-  @type hole_token :: {:text, String.t()} | {:hole, String.t(), non_neg_integer()}
+  # A token is either a seqment of plain text or an `{N}`-style hole.
+  @type translation_token :: {:text, String.t()} | {:hole, non_neg_integer()}
 
   # {Output file path, file content}
   @type printed_file :: {Path.t(), String.t()}
@@ -44,8 +42,10 @@ defmodule I18n2Elm.Domain.Types do
 
         %Translation{language_tag: "da_DK",
                      translations: [
-                         {"TidHello", [{:hole, "Hej, ", 0},
-                                       {:hole, ". Leder du efter ", 1},
+                         {"TidHello", [{:text, "Hej, "},
+                                       {:hole, 0},
+                                       {:text, ". Leder du efter "},
+                                       {:hole, 1},
                                        {:text, "?"}]},
                          {"TidNext", [{:text, "Næste"}]},
                          {"TidNo", [{:text, "Nej"}]},

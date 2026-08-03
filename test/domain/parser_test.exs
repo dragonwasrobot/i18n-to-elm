@@ -1,5 +1,5 @@
 defmodule I18n2ElmTest.Parser do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias I18n2Elm.Domain.Parser
   alias I18n2Elm.Domain.Types.Translation
@@ -19,11 +19,12 @@ defmodule I18n2ElmTest.Parser do
     # When parsing it for the da_DK language tag
     {:ok, parsed_translation} = json |> Jason.decode!() |> Parser.parse_translation("da_DK")
 
-    # Then each key is Tid-prefixed and each value is split into tagged text/hole tuples
+    # Then each key is Tid-prefixed and each value is split into tagged text/hole tokens
     expected_parsed_translation = %Translation{
       language_tag: "da_DK",
       translations: [
-        {"TidHello", [{:hole, "Hej, ", 1}, {:hole, ". Leder du efter ", 0}, {:text, "?"}]},
+        {"TidHello",
+         [{:text, "Hej, "}, {:hole, 1}, {:text, ". Leder du efter "}, {:hole, 0}, {:text, "?"}]},
         {"TidNext", [{:text, "Næste"}]},
         {"TidNo", [{:text, "Nej"}]},
         {"TidPrevious", [{:text, "Forrige"}]},
@@ -32,6 +33,23 @@ defmodule I18n2ElmTest.Parser do
     }
 
     assert parsed_translation == expected_parsed_translation
+  end
+
+  test "should parse a translation value with holes at both the start and the end" do
+    # Given a translation value with holes at both the start and the end
+    json = ~S"""
+    {"Hello": "{0} mid {1}"}
+    """
+
+    # When parsing it for the da_DK language tag
+    {:ok, parsed_translation} = json |> Jason.decode!() |> Parser.parse_translation("da_DK")
+
+    # Then the value is split into tagged text/hole tokens, with no token for
+    # the absent boundary text
+    assert parsed_translation == %Translation{
+             language_tag: "da_DK",
+             translations: [{"TidHello", [{:hole, 0}, {:text, " mid "}, {:hole, 1}]}]
+           }
   end
 
   test "should reject a translation value with non-contiguous hole numbering" do

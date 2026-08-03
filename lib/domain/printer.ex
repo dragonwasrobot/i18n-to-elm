@@ -71,8 +71,10 @@ defmodule I18n2Elm.Domain.Printer do
   end
 
   # Turns
-  #     {"TidHello", [{:hole, "Hej, ", 1},
-  #                   {:hole, ". Leder du efter ", 0},
+  #     {"TidHello", [{:text, "Hej, "},
+  #                   {:hole, 1},
+  #                   {:text, ". Leder du efter "},
+  #                   {:hole, 0},
   #                   {:text, "?"}]}
   # into
   #     {"TidHello hole0 hole1",
@@ -80,21 +82,21 @@ defmodule I18n2Elm.Domain.Printer do
   #
   # Hole numbering (not textual order) decides both the key's parameter
   # order and which `holeN` variable each quoted text sequence is joined against.
-  @spec create_translation_pair({String.t(), [Types.hole_token()]}) :: {String.t(), String.t()}
+  @spec create_translation_pair({String.t(), [Types.translation_token()]}) ::
+          {String.t(), String.t()}
   defp create_translation_pair({translation_id, translation}) do
     arguments = create_translation_arguments(translation)
     key = format_id_with_arguments(translation_id, arguments)
-    value = create_translation_value(translation)
-
+    value = Enum.map_join(translation, " ++ ", &quote_translation/1)
     {key, value}
   end
 
-  @spec create_translation_arguments([Types.hole_token()]) :: String.t()
+  @spec create_translation_arguments([Types.translation_token()]) :: String.t()
   defp create_translation_arguments(translation) do
     translation
     |> Enum.filter(&hole?/1)
-    |> Enum.sort(fn {:hole, _text1, hole1}, {:hole, _text2, hole2} -> hole1 < hole2 end)
-    |> Enum.map(fn {:hole, _text, hole_number} -> hole_number end)
+    |> Enum.sort(fn {:hole, hole1}, {:hole, hole2} -> hole1 < hole2 end)
+    |> Enum.map(fn {:hole, hole_number} -> hole_number end)
     |> Enum.map_join(" ", fn hole_number -> "hole#{hole_number}" end)
   end
 
@@ -103,25 +105,13 @@ defmodule I18n2Elm.Domain.Printer do
     String.trim("#{translation_id} #{arguments}")
   end
 
-  @spec hole?(Types.hole_token()) :: boolean
-  defp hole?({:hole, _text, _hole_number}), do: true
+  @spec hole?(Types.translation_token()) :: boolean
+  defp hole?({:hole, _hole_number}), do: true
   defp hole?({:text, _text}), do: false
 
-  @spec create_translation_value([Types.hole_token()]) :: String.t()
-  defp create_translation_value(translation) do
-    translation
-    |> Enum.map(&quote_translation/1)
-    |> Enum.map(&Tuple.to_list/1)
-    |> List.flatten()
-    |> Enum.join(" ++ ")
-  end
-
-  @spec quote_translation(Types.hole_token()) :: {String.t(), String.t()} | {String.t()}
-  defp quote_translation({:hole, text, hole_number}) do
-    {"\"#{text}\"", "hole#{hole_number}"}
-  end
-
-  defp quote_translation({:text, text}), do: {"\"#{text}\""}
+  @spec quote_translation(Types.translation_token()) :: String.t()
+  defp quote_translation({:hole, hole_number}), do: "hole#{hole_number}"
+  defp quote_translation({:text, text}), do: "\"#{text}\""
 
   @spec print_ids([Translation.t()], String.t()) ::
           {:ok, Types.printed_file()}
