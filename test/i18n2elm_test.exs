@@ -1,6 +1,8 @@
 defmodule I18n2ElmTest do
   use ExUnit.Case
 
+  alias I18n2Elm.Domain.Locale
+
   setup do
     module_name = "Translations"
 
@@ -55,6 +57,6 @@ defmodule I18n2ElmTest do
       end)
 
     # Then generation fails, naming the file whose keys don't match
-    assert {:error, {:mismatched_keys, "da_DK"}} = result
+    assert {:error, {:mismatched_keys, %Locale{language: "da", country: "DK"}}} = result
   end
 end
