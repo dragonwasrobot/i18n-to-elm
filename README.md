@@ -59,25 +59,34 @@ folder.
 
 Domain terms used throughout the code and documentation, defined once here:
 
-- **Translation**: a parsed translation file: a language tag plus its list of
+**i18n parsing terms:**
+- **I18n resource**: a parsed translation file: a locale plus its list of
   translation key/value pairs.
-- **Language tag**: the `<language>_<COUNTRY>` identifier a translation file is
-  named after, e.g. `da_DK`.
-- **Reference language**: the language tag treated as the default/reference
-  language, currently `en_US`. The **reference translation** -- the
-  **Translation** whose language tag matches it -- is what the **Translation
+- **Locale**: the `<language>_<COUNTRY>` identifier a translation file is named
+  after, e.g. `da_DK`.
+- **Reference locale**: the locale treated as the default locale, currently
+  `en_US`. The **I18n resource** matching this locale is what the **Translation
   ID** and the `Util` module's language dispatch are derived from; every input
   file must share its key set, and one input file must be for this language.
+- **Translation pair**: one key/value entry within an **I18n resource**'s list;
+  a **Translation key** paired with its parsed value, a list of **Translation
+  tokens**.
+- **Translation key**: the key identifying one translation pair, e.g. `Hello`.
+- **Translation token**: one element of a translation value's parsed form;
+  either a run of plain text or a **Hole**.
 - **Hole**: a `{N}`-style placeholder in a translation value, turned into a
   positional Elm function parameter (`hole0`, `hole1`, ...); numbering must be
   contiguous and 0-indexed.
-- **Translation ID**: the shared Elm union type of all translation keys (e.g.
+
+**Code generation terms:**
+- **Translation ID**: both the shared Elm union type of all translation keys,
+  and the individual `Tid`-prefixed identifiers that populate it (e.g.
   `TidHello`), derived from the reference translation.
-- **Language resource**: the printer's per-language template input: a
+- **Language view**: the printer's per-language template input: a
   translation's file name, translation function name, and translation pairs.
-- **IDs resource**: the printer's template input for the Translation ID union
+- **IDs view**: the printer's template input for the Translation ID union
   type.
-- **Util resource**: the printer's template input for the Language union type
+- **Util view**: the printer's template input for the Language union type
   and the `parseLanguage`/`translate` dispatch functions.
 - **Module name**: the Elm module name prefix (`--module-name`) under which all
   generated files are namespaced; defaults to `Translations`.

@@ -1,17 +1,20 @@
 defmodule I18n2Elm.Domain.Printer do
   @moduledoc """
-  Prints an intermediate representation of a JSON i18n file into a series
-  of elm types and functions.
+  Prints a list of `I18nResource` structs into a set of Elm i18n modules
+  providing type-safe translation functionality.
   """
 
   @templates_location Application.compile_env(:i18n2elm, :templates_location)
 
   require Elixir.EEx
-  alias I18n2Elm.Domain.Types
-  alias I18n2Elm.Domain.Types.Translation
-  alias I18n2Elm.Result
+  alias I18n2Elm.Domain.I18nResource
+  alias I18n2Elm.Domain.Locale
+  alias I18n2Elm.Domain.PrinterViews.{IdsView, LanguageView, UtilView}
 
-  @type reason :: :invalid_language_tag | :missing_reference_translation
+  @type reason :: :missing_reference_translation
+
+  # {Output file path, file content}
+  @type printed_file :: {Path.t(), String.t()}
 
   @language_location Path.join(@templates_location, "language.elm.eex")
   EEx.function_from_file(:defp, :language_template, @language_location, [
@@ -32,19 +35,24 @@ defmodule I18n2Elm.Domain.Printer do
   ])
 
   @doc """
-  Prints Elm translation modules, `<Lang><Country>.elm` for a full set of
-  languages, also produces the shared `Ids.elm` and `Utils.elm` modules that the
-  language modules depend on.
+  Prints Elm i18n modules, `<Lang><Country>.elm` for a full set of languages,
+  also produces the shared `Ids.elm` and `Utils.elm` modules that the language
+  modules depend on.
   """
-  @spec print_translations([Translation.t()], String.t()) ::
-          {:ok, [Types.printed_file()]}
+  @spec print_elm_i18n_modules([I18nResource.t()], String.t()) ::
+          {:ok, [printed_file()]}
           | {:error, reason()}
-  def print_translations(translations, module_name) do
-    with {:ok, printed_translations} <-
-           Result.traverse(translations, &print_translation(&1, module_name)),
-         {:ok, printed_ids} <- print_ids(translations, module_name),
-         {:ok, printed_util} <- print_util(translations, module_name) do
-      {:ok, printed_translations ++ [printed_ids] ++ [printed_util]}
+  def print_elm_i18n_modules(translations, module_name) do
+    case Enum.find(translations, &I18nResource.reference?/1) do
+      nil ->
+        {:error, :missing_reference_translation}
+
+      reference_translation ->
+        printed_translations = Enum.map(translations, &print_translation_module(&1, module_name))
+        printed_ids = print_ids_module(reference_translation, module_name)
+        printed_util = print_util_module(translations, module_name)
+
+        {:ok, printed_translations ++ [printed_ids, printed_util]}
     end
   end
 
@@ -52,46 +60,50 @@ defmodule I18n2Elm.Domain.Printer do
   Prints one language's Elm translation module: the `<Lang><Country>.elm` file
   exposing a `<lang><Country>Translations` function.
   """
-  @spec print_translation(Translation.t(), String.t()) ::
-          {:ok, Types.printed_file()}
-          | {:error, :invalid_language_tag}
-  def print_translation(translation, module_name) do
-    with {:ok, file_name} <- create_file_name(translation),
-         {:ok, translation_name} <- create_translation_name(translation) do
-      file_path = create_file_path(file_name, module_name)
+  @spec print_translation_module(I18nResource.t(), String.t()) :: printed_file()
+  def print_translation_module(translation, module_name) do
+    file_name = create_file_name(translation)
+    translation_name = create_translation_name(translation)
+    file_path = create_file_path(file_name, module_name)
 
-      translations =
-        translation.translations
-        |> Enum.map(&create_translation_pair/1)
+    translation_pairs =
+      translation.translation_pairs
+      |> Enum.map(&create_translation_pair/1)
 
-      translation_file = language_template(module_name, file_name, translation_name, translations)
+    view = LanguageView.new(file_name, translation_name, translation_pairs)
 
-      {:ok, {file_path, String.trim(translation_file) <> "\n"}}
-    end
+    translation_file =
+      language_template(
+        module_name,
+        view.file_name,
+        view.translation_name,
+        view.translation_pairs
+      )
+
+    {file_path, String.trim(translation_file) <> "\n"}
   end
 
   # Turns
-  #     {"TidHello", [{:text, "Hej, "},
-  #                   {:hole, 1},
-  #                   {:text, ". Leder du efter "},
-  #                   {:hole, 0},
-  #                   {:text, "?"}]}
+  #     {"Hello", [{:text, "Hej, "},
+  #                {:hole, 1},
+  #                {:text, ". Leder du efter "},
+  #                {:hole, 0},
+  #                {:text, "?"}]}
   # into
   #     {"TidHello hole0 hole1",
   #      "\"Hej, \" ++ hole1 ++ \". Leder du efter \" ++ hole0 ++ \"?\""}.
   #
   # Hole numbering (not textual order) decides both the key's parameter
   # order and which `holeN` variable each quoted text sequence is joined against.
-  @spec create_translation_pair({String.t(), [Types.translation_token()]}) ::
-          {String.t(), String.t()}
-  defp create_translation_pair({translation_id, translation}) do
+  @spec create_translation_pair(I18nResource.translation_pair()) :: {String.t(), String.t()}
+  defp create_translation_pair({translation_key, translation}) do
     arguments = create_translation_arguments(translation)
-    key = format_id_with_arguments(translation_id, arguments)
+    key = format_id_with_arguments(translation_key, arguments)
     value = Enum.map_join(translation, " ++ ", &quote_translation/1)
     {key, value}
   end
 
-  @spec create_translation_arguments([Types.translation_token()]) :: String.t()
+  @spec create_translation_arguments([I18nResource.translation_token()]) :: String.t()
   defp create_translation_arguments(translation) do
     translation
     |> Enum.filter(&hole?/1)
@@ -100,92 +112,90 @@ defmodule I18n2Elm.Domain.Printer do
     |> Enum.map_join(" ", fn hole_number -> "hole#{hole_number}" end)
   end
 
-  @spec format_id_with_arguments(String.t(), String.t()) :: String.t()
-  defp format_id_with_arguments(translation_id, arguments) do
-    String.trim("#{translation_id} #{arguments}")
+  @spec format_id_with_arguments(I18nResource.translation_key(), String.t()) :: String.t()
+  defp format_id_with_arguments(translation_key, arguments) do
+    String.trim("Tid#{translation_key} #{arguments}")
   end
 
-  @spec hole?(Types.translation_token()) :: boolean
+  @spec hole?(I18nResource.translation_token()) :: boolean
   defp hole?({:hole, _hole_number}), do: true
   defp hole?({:text, _text}), do: false
 
-  @spec quote_translation(Types.translation_token()) :: String.t()
+  @spec quote_translation(I18nResource.translation_token()) :: String.t()
   defp quote_translation({:hole, hole_number}), do: "hole#{hole_number}"
   defp quote_translation({:text, text}), do: "\"#{text}\""
 
-  @spec print_ids([Translation.t()], String.t()) ::
-          {:ok, Types.printed_file()}
-          | {:error, :missing_reference_translation}
-  def print_ids(translations, module_name) do
+  @doc """
+  Prints the shared `Ids.elm` file: the `TranslationId` union type derived
+  from `reference_translation`.
+  """
+  @spec print_ids_module(I18nResource.t(), String.t()) :: printed_file()
+  def print_ids_module(reference_translation, module_name) do
     file_name = "Ids"
     file_path = create_file_path(file_name, module_name)
+    ids = build_ids(reference_translation)
+    view = IdsView.new(ids)
+    ids_file = ids_template(module_name, view.ids)
 
-    case Enum.find(translations, &reference_translation?/1) do
-      nil ->
-        {:error, :missing_reference_translation}
-
-      reference_translation ->
-        ids = build_ids(reference_translation)
-        ids_file = ids_template(module_name, ids)
-
-        {:ok, {file_path, ids_file}}
-    end
+    {file_path, ids_file}
   end
 
-  @spec build_ids(Translation.t()) :: [String.t()]
-  defp build_ids(%Translation{translations: translations}) do
-    Enum.map(translations, fn {translation_id, translation} ->
+  @spec build_ids(I18nResource.t()) :: [String.t()]
+  defp build_ids(%I18nResource{translation_pairs: translation_pairs}) do
+    Enum.map(translation_pairs, fn {translation_key, translation} ->
       arguments =
         translation
         |> Enum.filter(&hole?/1)
         |> Enum.map_join(" ", fn _ -> "String" end)
 
-      format_id_with_arguments(translation_id, arguments)
+      format_id_with_arguments(translation_key, arguments)
     end)
   end
 
-  @spec reference_translation?(Translation.t()) :: boolean()
-  defp reference_translation?(%Translation{language_tag: language_tag}) do
-    language_tag == Types.reference_language_tag()
-  end
-
-  @spec print_util([Translation.t()], String.t()) ::
-          {:ok, Types.printed_file()}
-          | {:error, :invalid_language_tag}
-  def print_util(translations, module_name) do
+  @doc """
+  Prints the shared `Util.elm` file: the `Language` union type plus the
+  `parseLanguage`/`translate` dispatch functions across all `translations`.
+  """
+  @spec print_util_module([I18nResource.t()], String.t()) :: printed_file()
+  def print_util_module(translations, module_name) do
     file_name = "Util"
     file_path = create_file_path(file_name, module_name)
-    sorted_translations = Enum.sort(translations, &by_language_tag/2)
+    sorted_translations = Enum.sort(translations, &by_locale/2)
 
-    with {:ok, imports} <- Result.traverse(sorted_translations, &build_import/1),
-         {:ok, languages} <- Result.traverse(sorted_translations, &build_language/1) do
-      util_file = util_template(module_name, imports, languages)
-      {:ok, {file_path, util_file}}
-    end
+    imports = Enum.map(sorted_translations, &build_import/1)
+    languages = Enum.map(sorted_translations, &build_language/1)
+    view = UtilView.new(imports, languages)
+    util_file = util_template(module_name, view.imports, view.languages)
+
+    {file_path, util_file}
   end
 
-  @spec by_language_tag(Translation.t(), Translation.t()) :: boolean()
-  defp by_language_tag(t1, t2), do: t1.language_tag <= t2.language_tag
+  # Compares by {language, country}, not the %Locale{} structs themselves --
+  # struct/map comparison in Elixir sorts by key name first (`country` before
+  # `language`), which would sort by country and silently produce the wrong
+  # order.
+  @spec by_locale(I18nResource.t(), I18nResource.t()) :: boolean()
+  defp by_locale(t1, t2) do
+    {t1.locale.language, t1.locale.country} <= {t2.locale.language, t2.locale.country}
+  end
 
-  @spec build_import(Translation.t()) :: {:ok, map} | {:error, :invalid_language_tag}
+  @spec build_import(I18nResource.t()) :: %{file_name: String.t(), translation_name: String.t()}
   defp build_import(translation) do
-    with {:ok, file_name} <- create_file_name(translation),
-         {:ok, translation_name} <- create_translation_name(translation) do
-      {:ok, %{file_name: file_name, translation_name: translation_name}}
-    end
+    %{
+      file_name: create_file_name(translation),
+      translation_name: create_translation_name(translation)
+    }
   end
 
-  @spec build_language(Translation.t()) :: {:ok, map()} | {:error, :invalid_language_tag}
-  defp build_language(%Translation{language_tag: language_tag} = translation) do
-    with {:ok, translation_name} <- create_translation_name(translation) do
-      language = %{
-        string_value: language_tag,
-        type_value: String.upcase(language_tag),
-        translation_fun: translation_name
-      }
+  @spec build_language(I18nResource.t()) :: map()
+  defp build_language(%I18nResource{locale: locale} = translation) do
+    locale_string = Locale.format(locale)
 
-      {:ok, language}
-    end
+    %{
+      string_value: locale_string,
+      type_value: String.upcase(locale_string),
+      translation_fun: create_translation_name(translation)
+    }
   end
 
   @spec create_file_path(String.t(), String.t()) :: Path.t()
@@ -200,29 +210,15 @@ defmodule I18n2Elm.Domain.Printer do
     Path.join(parts)
   end
 
-  @spec create_file_name(Translation.t()) :: {:ok, String.t()} | {:error, :invalid_language_tag}
-  defp create_file_name(%Translation{language_tag: language_tag}) do
-    with {:ok, {language, country}} <- split_language_tag(language_tag) do
-      {:ok, String.capitalize(language) <> String.capitalize(country)}
-    end
+  @spec create_file_name(I18nResource.t()) :: String.t()
+  defp create_file_name(%I18nResource{locale: %Locale{language: language, country: country}}) do
+    String.capitalize(language) <> String.capitalize(country)
   end
 
-  @spec split_language_tag(String.t()) ::
-          {:ok, {String.t(), String.t()}}
-          | {:error, :invalid_language_tag}
-  defp split_language_tag(language_tag) do
-    case String.split(language_tag, "_") do
-      [language, country] -> {:ok, {language, country}}
-      _ -> {:error, :invalid_language_tag}
-    end
-  end
-
-  @spec create_translation_name(Translation.t()) ::
-          {:ok, String.t()}
-          | {:error, :invalid_language_tag}
-  defp create_translation_name(%Translation{language_tag: language_tag}) do
-    with {:ok, {language, country}} <- split_language_tag(language_tag) do
-      {:ok, language <> String.capitalize(country) <> "Translations"}
-    end
+  @spec create_translation_name(I18nResource.t()) :: String.t()
+  defp create_translation_name(%I18nResource{
+         locale: %Locale{language: language, country: country}
+       }) do
+    language <> String.capitalize(country) <> "Translations"
   end
 end

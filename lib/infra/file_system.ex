@@ -74,7 +74,7 @@ defmodule I18n2Elm.Infra.FileSystem do
     end
   end
 
-  @spec create_output_dir(list) :: {:ok, Path.t()} | {:error, File.posix()}
+  @spec create_output_dir(Keyword.t()) :: {:ok, Path.t()} | {:error, File.posix()}
   def create_output_dir(options) do
     output_path = Keyword.get(options, :module_name, "Translations")
 

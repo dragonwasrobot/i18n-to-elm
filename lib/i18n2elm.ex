@@ -31,8 +31,8 @@ defmodule I18n2Elm do
 
     with {:ok, paths, options} <- CLI.parse_args(args),
          {:ok, files} <- FileSystem.resolve_all_paths(paths),
-         {:ok, output_path} <- FileSystem.create_output_dir(options),
-         {:ok, written_files} <- generate(files, output_path) do
+         {:ok, module_name} <- FileSystem.create_output_dir(options),
+         {:ok, written_files} <- generate(files, module_name) do
       Logger.debug("Written files: #{inspect(written_files)}")
       exit(:normal)
     else
@@ -58,7 +58,7 @@ defmodule I18n2Elm do
   def generate(json_translations_path, module_name) do
     with {:ok, raw_translations} <- FileSystem.read_json_files(json_translations_path),
          {:ok, translations} <- Parser.parse_translations(raw_translations),
-         {:ok, printed_translations} <- Printer.print_translations(translations, module_name) do
+         {:ok, printed_translations} <- Printer.print_elm_i18n_modules(translations, module_name) do
       Result.traverse(printed_translations, fn {file_path, file_content} ->
         FileSystem.write_file(file_path, file_content)
       end)

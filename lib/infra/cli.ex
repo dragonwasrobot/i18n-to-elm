@@ -8,7 +8,7 @@ defmodule I18n2Elm.Infra.CLI do
   @type unknown_argument :: %{flag: String.t(), value: String.t() | nil}
   @type reason :: :no_paths_given | {:unknown_arguments, [unknown_argument()]}
 
-  @spec parse_args([String.t()]) :: {:ok, [Path.t()], keyword()} | {:error, reason()}
+  @spec parse_args([String.t()]) :: {:ok, [Path.t()], Keyword.t()} | {:error, reason()}
   def parse_args(args) do
     case OptionParser.parse(args, strict: [module_name: :string]) do
       {_options, [], _errors} ->
