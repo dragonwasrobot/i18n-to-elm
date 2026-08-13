@@ -83,9 +83,14 @@ defmodule I18n2Elm.Infra.FileSystem do
     end
   end
 
+  @doc """
+  Writes `file_content` to `file_path`, creating any missing parent
+  directories first.
+  """
   @spec write_file(Path.t(), String.t()) :: {:ok, Path.t()} | {:error, File.posix()}
   def write_file(file_path, file_content) do
-    with {:ok, file} <- File.open(file_path, [:write]),
+    with :ok <- File.mkdir_p(Path.dirname(file_path)),
+         {:ok, file} <- File.open(file_path, [:write]),
          :ok <- IO.binwrite(file, file_content),
          :ok <- File.close(file) do
       Logger.info("Created file: #{file_path}")

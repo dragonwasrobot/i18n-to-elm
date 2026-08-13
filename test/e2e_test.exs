@@ -22,7 +22,7 @@ defmodule I18n2ElmTest.E2E do
     {:ok, module_name: module_name, input_dir: input_dir, output_dir: output_dir}
   end
 
-  test "should generate an Elm file per language plus Ids and Util modules on disk", %{
+  test "should generate the native file set on disk", %{
     module_name: module_name,
     input_dir: input_dir,
     output_dir: output_dir
@@ -33,7 +33,7 @@ defmodule I18n2ElmTest.E2E do
     File.write!(en_us_path, ~S({"Hello": "Hello, {0}!", "Yes": "Yes"}))
     File.write!(da_dk_path, ~S({"Hello": "Hej, {0}!", "Yes": "Ja"}))
 
-    # When generating Elm code from those files
+    # When generating native output from those files
     result =
       File.cd!(output_dir, fn ->
         I18n2Elm.generate([en_us_path, da_dk_path], module_name)
@@ -60,5 +60,46 @@ defmodule I18n2ElmTest.E2E do
     assert util_elm =~ "type Language"
     assert util_elm =~ "DA_DK"
     assert util_elm =~ "EN_US"
+  end
+
+  test "should generate the web-component file set on disk", %{
+    module_name: module_name,
+    input_dir: input_dir,
+    output_dir: output_dir
+  } do
+    # Given real en_US and da_DK translation files on disk
+    en_us_path = Path.join(input_dir, "en_US.json")
+    da_dk_path = Path.join(input_dir, "da_DK.json")
+    File.write!(en_us_path, ~S({"Hello": "Hello, {0}!", "Yes": "Yes"}))
+    File.write!(da_dk_path, ~S({"Hello": "Hej, {0}!", "Yes": "Ja"}))
+
+    # When generating web-component output from those files
+    result =
+      File.cd!(output_dir, fn ->
+        I18n2Elm.generate([en_us_path, da_dk_path], module_name, :web_component)
+      end)
+
+    # Then generation succeeds and each expected file exists on disk with real content
+    assert {:ok, written_files} = result
+    assert length(written_files) == 6
+
+    ids_elm = File.read!(Path.join(output_dir, "Translations/Ids.elm"))
+    assert ids_elm =~ "type TranslationId"
+    assert ids_elm =~ "TidHello String"
+
+    i18n_text_elm = File.read!(Path.join(output_dir, "Translations/I18nText.elm"))
+    assert i18n_text_elm =~ "module Translations.I18nText exposing (view)"
+
+    en_us_json = File.read!(Path.join(output_dir, "static/en_US.json"))
+    assert en_us_json =~ ~S("Hello": "Hello, {0}!")
+
+    da_dk_json = File.read!(Path.join(output_dir, "static/da_DK.json"))
+    assert da_dk_json =~ ~S("Hello": "Hej, {0}!")
+
+    locales_json = File.read!(Path.join(output_dir, "static/locales.json"))
+    assert locales_json =~ ~S(["da_DK","en_US"])
+
+    script_js = File.read!(Path.join(output_dir, "static/i18n-text.js"))
+    assert script_js =~ "customElements.define('i18n-text', I18nTextElement)"
   end
 end

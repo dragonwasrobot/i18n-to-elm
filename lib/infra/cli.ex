@@ -10,7 +10,7 @@ defmodule I18n2Elm.Infra.CLI do
 
   @spec parse_args([String.t()]) :: {:ok, [Path.t()], Keyword.t()} | {:error, reason()}
   def parse_args(args) do
-    case OptionParser.parse(args, strict: [module_name: :string]) do
+    case OptionParser.parse(args, strict: [module_name: :string, output_mode: :string]) do
       {_options, [], _errors} ->
         {:error, :no_paths_given}
 

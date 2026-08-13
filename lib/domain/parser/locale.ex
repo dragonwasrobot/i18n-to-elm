@@ -1,4 +1,4 @@
-defmodule I18n2Elm.Domain.Locale do
+defmodule I18n2Elm.Domain.Parser.Locale do
   @moduledoc ~S"""
   Represents a parsed `<language>_<COUNTRY>` locale identifier, e.g.
   `da_DK` parses to `%Locale{language: "da", country: "DK"}`.

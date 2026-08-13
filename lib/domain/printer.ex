@@ -4,17 +4,14 @@ defmodule I18n2Elm.Domain.Printer do
   providing type-safe translation functionality.
   """
 
-  @templates_location Application.compile_env(:i18n2elm, :templates_location)
-
   require Elixir.EEx
-  alias I18n2Elm.Domain.I18nResource
-  alias I18n2Elm.Domain.Locale
-  alias I18n2Elm.Domain.PrinterViews.{IdsView, LanguageView, UtilView}
-
-  @type reason :: :missing_reference_translation
+  alias I18n2Elm.Domain.Parser.{I18nResource, Locale}
+  alias I18n2Elm.Domain.Printer.{I18nTextView, IdsView, LanguageView, UtilView}
 
   # {Output file path, file content}
   @type printed_file :: {Path.t(), String.t()}
+
+  @templates_location Application.compile_env(:i18n2elm, :templates_location)
 
   @language_location Path.join(@templates_location, "language.elm.eex")
   EEx.function_from_file(:defp, :language_template, @language_location, [
@@ -34,26 +31,50 @@ defmodule I18n2Elm.Domain.Printer do
     :languages
   ])
 
+  @i18n_text_location Path.join(@templates_location, "i18n_text.elm.eex")
+  EEx.function_from_file(:defp, :i18n_text_template, @i18n_text_location, [
+    :module_name,
+    :clauses
+  ])
+
+  # Not templated as nothing in it varies per project.
+  @web_component_js_path @templates_location
+                         |> Path.join("../web-component/i18n-text.js")
+                         |> Path.expand()
+  @external_resource @web_component_js_path
+  @web_component_source File.read!(@web_component_js_path)
+
   @doc """
-  Prints Elm i18n modules, `<Lang><Country>.elm` for a full set of languages,
-  also produces the shared `Ids.elm` and `Utils.elm` modules that the language
-  modules depend on.
+  Prints `native` mode's file set: `<Lang><Country>.elm` for a full set of
+  languages, plus the shared `Ids.elm` and `Util.elm` modules that the
+  language modules depend upon.
   """
-  @spec print_elm_i18n_modules([I18nResource.t()], String.t()) ::
-          {:ok, [printed_file()]}
-          | {:error, reason()}
-  def print_elm_i18n_modules(translations, module_name) do
-    case Enum.find(translations, &I18nResource.reference?/1) do
-      nil ->
-        {:error, :missing_reference_translation}
+  @spec print_native_modules([I18nResource.t()], I18nResource.t(), String.t()) :: [printed_file()]
+  def print_native_modules(translations, reference_translation, module_name) do
+    printed_ids = print_ids_module(reference_translation, module_name)
+    printed_util = print_util_module(translations, module_name)
+    printed_translations = Enum.map(translations, &print_translation_module(&1, module_name))
 
-      reference_translation ->
-        printed_translations = Enum.map(translations, &print_translation_module(&1, module_name))
-        printed_ids = print_ids_module(reference_translation, module_name)
-        printed_util = print_util_module(translations, module_name)
+    printed_translations ++ [printed_ids, printed_util]
+  end
 
-        {:ok, printed_translations ++ [printed_ids, printed_util]}
-    end
+  @doc """
+  Prints the `web-component` mode's file set: `Ids.elm` and `I18nText.elm` plus
+  the `static/` runtime assets (per-locale JSON, `locales.json`, and the
+  `<i18n-text>` module) they depend upon.
+  """
+  @spec print_web_component_modules([I18nResource.t()], I18nResource.t(), String.t()) :: [
+          printed_file()
+        ]
+  def print_web_component_modules(translations, reference_translation, module_name) do
+    printed_ids = print_ids_module(reference_translation, module_name)
+    printed_i18n_text = print_i18n_text_module(reference_translation, module_name)
+    printed_locale_jsons = Enum.map(translations, &print_locale_json/1)
+    printed_locales_manifest = print_locales_manifest(translations)
+    printed_script = print_web_component_script()
+
+    [printed_ids, printed_i18n_text, printed_locales_manifest, printed_script] ++
+      printed_locale_jsons
   end
 
   @doc """
@@ -105,11 +126,17 @@ defmodule I18n2Elm.Domain.Printer do
 
   @spec create_translation_arguments([I18nResource.translation_token()]) :: String.t()
   defp create_translation_arguments(translation) do
+    Enum.join(extract_hole_variables(translation), " ")
+  end
+
+  # Turns a translation's hole tokens into their `holeN` Elm variable names, in
+  # ascending hole-number order.
+  @spec extract_hole_variables([I18nResource.translation_token()]) :: [String.t()]
+  defp extract_hole_variables(translation) do
     translation
     |> Enum.filter(&hole?/1)
     |> Enum.sort(fn {:hole, hole1}, {:hole, hole2} -> hole1 < hole2 end)
-    |> Enum.map(fn {:hole, hole_number} -> hole_number end)
-    |> Enum.map_join(" ", fn hole_number -> "hole#{hole_number}" end)
+    |> Enum.map(fn {:hole, hole_number} -> "hole#{hole_number}" end)
   end
 
   @spec format_id_with_arguments(I18nResource.translation_key(), String.t()) :: String.t()
@@ -138,6 +165,98 @@ defmodule I18n2Elm.Domain.Printer do
     ids_file = ids_template(module_name, view.ids)
 
     {file_path, ids_file}
+  end
+
+  @doc """
+  Prints the `web-component` mode's `I18nText.elm` file: a single
+  `view` function dispatching every `TranslationId` to an `<i18n-text>`
+  custom element, derived from `reference_translation`.
+  """
+  @spec print_i18n_text_module(I18nResource.t(), String.t()) :: printed_file()
+  def print_i18n_text_module(reference_translation, module_name) do
+    file_name = "I18nText"
+    file_path = create_file_path(file_name, module_name)
+    clauses = build_clauses(reference_translation)
+    view = I18nTextView.new(clauses)
+    i18n_text_file = i18n_text_template(module_name, view.clauses)
+
+    {file_path, String.trim(i18n_text_file) <> "\n"}
+  end
+
+  @spec build_clauses(I18nResource.t()) :: [I18nTextView.clause()]
+  defp build_clauses(%I18nResource{translation_pairs: translation_pairs}) do
+    Enum.map(translation_pairs, fn {translation_key, translation} ->
+      arguments = create_translation_arguments(translation)
+      pattern = format_id_with_arguments(translation_key, arguments)
+      values_expr = create_values_expression(translation)
+
+      %{pattern: pattern, key: translation_key, values_expr: values_expr}
+    end)
+  end
+
+  @spec create_values_expression([I18nResource.translation_token()]) :: String.t()
+  defp create_values_expression(translation) do
+    case extract_hole_variables(translation) do
+      [] -> "[]"
+      hole_vars -> "[ " <> Enum.join(hole_vars, ", ") <> " ]"
+    end
+  end
+
+  @doc """
+  Prints one locale's runtime JSON asset. Reconstructs the original
+  `{0}`/`{1}`-style JSON from `translation`'s already-tokenized
+  `translation_pairs`.
+  """
+  @spec print_locale_json(I18nResource.t()) :: printed_file()
+  def print_locale_json(%I18nResource{locale: locale} = translation) do
+    file_path = create_static_asset_path(Locale.format(locale), "json")
+
+    json_file =
+      translation.translation_pairs
+      |> Enum.map(fn {translation_key, tokens} ->
+        {translation_key, Enum.map_join(tokens, &reconstruct_token/1)}
+      end)
+      |> Jason.OrderedObject.new()
+      |> Jason.encode!(pretty: true)
+
+    {file_path, json_file <> "\n"}
+  end
+
+  @spec reconstruct_token(I18nResource.translation_token()) :: String.t()
+  defp reconstruct_token({:text, text}), do: text
+  defp reconstruct_token({:hole, hole_number}), do: "{#{hole_number}}"
+
+  @doc """
+  Prints `locales.json`, the manifest of available locale tags. Used at runtime
+  to resolve a browser's requested language against the shipped per-locale JSON
+  assets.
+  """
+  @spec print_locales_manifest([I18nResource.t()]) :: printed_file()
+  def print_locales_manifest(translations) do
+    file_path = create_static_asset_path("locales", "json")
+
+    locale_tags =
+      translations
+      |> Enum.map(&Locale.format(&1.locale))
+      |> Enum.sort()
+
+    {file_path, Jason.encode!(locale_tags) <> "\n"}
+  end
+
+  @doc """
+  Prints the `<i18n-text>` custom element script, embedded at compile time from
+  `priv/web-component/i18n-text.js`.
+  """
+  @spec print_web_component_script() :: printed_file()
+  def print_web_component_script do
+    {create_static_asset_path("i18n-text", "js"), @web_component_source}
+  end
+
+  # Static assets are served as-is, not compiled, so they live under a
+  # fixed `static/` root sibling to the `<module-name>/` Elm directory.
+  @spec create_static_asset_path(String.t(), String.t()) :: Path.t()
+  defp create_static_asset_path(file_name, ext) do
+    Path.join([".", "static", "#{file_name}.#{ext}"])
   end
 
   @spec build_ids(I18nResource.t()) :: [String.t()]

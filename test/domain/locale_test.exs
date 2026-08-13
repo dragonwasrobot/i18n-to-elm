@@ -1,7 +1,7 @@
 defmodule I18n2ElmTest.Locale do
   use ExUnit.Case, async: true
 
-  alias I18n2Elm.Domain.Locale
+  alias I18n2Elm.Domain.Parser.Locale
 
   doctest Locale
 
