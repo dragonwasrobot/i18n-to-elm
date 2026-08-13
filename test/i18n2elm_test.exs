@@ -1,7 +1,7 @@
 defmodule I18n2ElmTest do
   use ExUnit.Case
 
-  alias I18n2Elm.Domain.Locale
+  alias I18n2Elm.Domain.Parser.Locale
 
   setup do
     module_name = "Translations"
@@ -22,6 +22,27 @@ defmodule I18n2ElmTest do
     end)
 
     {:ok, module_name: module_name, input_dir: input_dir, output_dir: output_dir}
+  end
+
+  test "should resolve or reject output-mode as appropriate" do
+    # Given options with --output-mode absent, set to "native", and set to
+    # "web-component"
+    absent = []
+    native = [output_mode: "native"]
+    web_component = [output_mode: "web-component"]
+    invalid = [output_mode: "bogus"]
+
+    # When resolving the output mode for each
+    absent_result = I18n2Elm.resolve_output_mode(absent)
+    native_result = I18n2Elm.resolve_output_mode(native)
+    web_component_result = I18n2Elm.resolve_output_mode(web_component)
+    invalid_result = I18n2Elm.resolve_output_mode(invalid)
+
+    # Then it defaults to native mode, and otherwise the appropriate output mode
+    assert {:ok, :native} = absent_result
+    assert {:ok, :native} = native_result
+    assert {:ok, :web_component} = web_component_result
+    assert {:error, {:invalid_output_mode, "bogus"}} = invalid_result
   end
 
   test "should reject generation when missing reference translation", %{

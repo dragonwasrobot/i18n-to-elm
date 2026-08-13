@@ -1,4 +1,4 @@
-name: Elixir CI
+name: CI
 
 on:
   push:
@@ -42,3 +42,11 @@ jobs:
 
     - name: Run tests
       run: mix test
+
+    - name: Set up Node
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24
+
+    - name: Run web component JS tests
+      run: node --test priv/web-component/test/i18n-text.test.js

@@ -1,7 +1,7 @@
 defmodule I18n2Elm.MixProject do
   use Mix.Project
 
-  @version "0.3.0"
+  @version "0.5.0"
   @elixir_version "~> 1.20"
 
   def project do

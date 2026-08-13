@@ -3,8 +3,7 @@ defmodule I18n2Elm.Domain.Parser do
   Parses JSON i18n files into an `I18nResource` to be used downstream for code generation.
   """
 
-  alias I18n2Elm.Domain.I18nResource
-  alias I18n2Elm.Domain.Locale
+  alias I18n2Elm.Domain.Parser.{I18nResource, Locale}
   alias I18n2Elm.Result
 
   @type reason ::

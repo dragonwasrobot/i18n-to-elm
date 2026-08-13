@@ -1,4 +1,4 @@
-defmodule I18n2Elm.Domain.I18nResource do
+defmodule I18n2Elm.Domain.Parser.I18nResource do
   @moduledoc ~S"""
   Represents a parsed i18n resource: a locale plus its list of translation
   key/value pairs.
@@ -30,7 +30,7 @@ defmodule I18n2Elm.Domain.I18nResource do
                      ]}
   """
 
-  alias I18n2Elm.Domain.Locale
+  alias I18n2Elm.Domain.Parser.Locale
 
   use TypedStruct
 

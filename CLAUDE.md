@@ -5,9 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Elixir escript CLI (`i18n2elm`) that converts a folder of i18n key/value
-JSON files into a set of Elm modules (types, per-language translation
-functions, and a language-dispatch util module). See README.md for
-input/output examples.
+JSON files into a set of Elm modules. Two output modes, selected via
+`--output-mode`: `native` (default) — types, per-language translation
+functions, and a language-dispatch util module — or `web-component` — types
+plus a single dispatch module backed by a generated `<i18n-text>` custom
+element and its runtime JSON/JS assets. See README.md for input/output
+examples.
 
 ## Commands
 
@@ -28,14 +31,17 @@ input/output examples.
 - `mix format` — format `mix.exs`, `config/**`, `lib/**`, `test/**` per
   `.formatter.exs`
 - `mix docs` — generate ExDoc documentation
-- `./scripts/smoke_test.sh` — manual-handoff smoke test for `I18n2Elm.main/1`'s
-  CLI wiring: builds the escript and exercises it end-to-end (golden path,
-  help text, unknown flag, no files found, malformed JSON, missing reference
-  language file, read-only output dir), asserting on real exit codes — the
-  one class of check `mix test` structurally can't cover, since `main/1`
-  calls `exit/1` directly. Local-only, not wired into CI.
-- CI (`.github/workflows/elixir.yml`) runs `mix deps.get` then `mix test` on
-  every push/PR to `master`, using the Elixir/Erlang versions pinned in
+- `node --test priv/web-component/test/i18n-text.test.js` — runs the
+  `web-component` mode's JS test suite: pure, DOM-free helpers
+  (`normalizeLocale`, `resolveLocale`, `substitute`) in
+  `priv/web-component/i18n-text.js`, via Node's built-in test runner (no
+  `package.json`, no bundler); `primarySubtag` isn't exported and is only
+  exercised indirectly through `resolveLocale`'s tests. The custom element
+  itself (fetch/caching, attribute-change lifecycle) isn't unit-tested.
+- CI (`.github/workflows/ci.yml`) runs, on every push/PR to `master`:
+  `mix deps.get`, `mix format --check-formatted`, `mix credo --strict`,
+  `mix dialyzer`, `mix test`, then the JS test suite above (via
+  `actions/setup-node@v6`), all using the Elixir/Erlang versions pinned in
   `mise.toml`
 
 ## Architecture
@@ -46,24 +52,41 @@ below.
 
 1. **`I18n2Elm` (`lib/i18n2elm.ex`, Main)** — the thin entry point. `main/1`
    parses CLI args via `Infra.CLI`, resolves/reads files via
-   `Infra.FileSystem`, then calls `generate/2`, which wires
-   `Infra.FileSystem`'s raw output through `Domain.Parser` →
-   `Domain.Printer` → `Infra.FileSystem.write_file/2`.
+   `Infra.FileSystem`, resolves the `--output-mode` flag's raw string into
+   an `output_mode :: :native | :web_component` via `resolve_output_mode/1`
+   (`lib/i18n2elm.ex:75`), then calls `generate/3`, which wires
+   `Infra.FileSystem`'s raw output through `Domain.Parser` → a private
+   `print_i18n_modules/3` (`lib/i18n2elm.ex:96-111`) that looks up the
+   reference translation (`Enum.find(translations,
+   &I18nResource.reference?/1)`, returning `{:error,
+   :missing_reference_translation}` on a `nil` match) and, once resolved,
+   dispatches on `output_mode` to `Domain.Printer.print_native_modules/3` or
+   `Domain.Printer.print_web_component_modules/3` →
+   `Infra.FileSystem.write_file/2`.
    This is the only module that depends on both `Infra` and `Domain` — new
    cross-cutting logic goes here, never smuggled into either layer.
+   Interpreting what `--output-mode`'s value *means* (which `Domain.Printer`
+   entry point to call) belongs here rather than in `Infra.CLI`, since only
+   `I18n2Elm` is allowed to know about both layers — see point 2.
 
 2. **`I18n2Elm.Infra.CLI` (`lib/infra/cli.ex`)** — the argv-parsing
-   boundary. `parse_args/1` wraps `OptionParser.parse/2` (only recognized
-   flag: `--module-name`, default `"Translations"`) and returns
-   `{:ok, paths, options} | {:error, reason}`, folding both the "no paths
-   given" and "unknown flag" cases into one result so `main/1` dispatches
-   through a single `with/else`. Depends on nothing but `OptionParser`.
+   boundary. `parse_args/1` wraps `OptionParser.parse/2` (recognized flags:
+   `--module-name`, default `"Translations"`, and `--output-mode`, a raw
+   string CLI hands back unvalidated) and returns `{:ok, paths, options} |
+   {:error, reason}`, folding both the "no paths given" and "unknown flag"
+   cases into one result so `main/1` dispatches through a single
+   `with/else`. Depends on nothing but `OptionParser` — validating
+   `--output-mode`'s *value* against the known modes is
+   `I18n2Elm.resolve_output_mode/1`'s job, not CLI's (point 1).
 
 3. **`I18n2Elm.Infra.FileSystem` (`lib/infra/file_system.ex`)** — the
    filesystem boundary: resolves CLI-provided paths to a flat list of
    `.json` files (recursing into directories, `resolve_all_paths/1`), reads
    and JSON-decodes each one (`read_json_files/1`), and writes generated
-   Elm files to disk (`write_file/2`). Hands decoded content back raw as
+   files to disk (`write_file/2`), creating any missing parent directory
+   first — needed since `web-component` mode writes into the static asset
+   root (§Vocabulary in README.md), a sibling of the `--module-name`
+   directory `create_output_dir/1` creates. Hands decoded content back raw as
    `{filename, map}` pairs rather than `I18nResource` structs — turning
    JSON into an `I18nResource` is domain logic, so `FileSystem` depends only
    on the shared `I18n2Elm.Result` helper, never on `Domain`.
@@ -85,44 +108,75 @@ below.
    enforces the cross-translation invariants — **all input JSON files must
    share identical key sets, and one of them must be for the reference
    language** (`validate_reference_language_present/1`,
-   `validate_matching_key_sets/1`) — so `I18n2Elm.generate/2` gets back a
+   `validate_matching_key_sets/1`) — so `I18n2Elm.generate/3` gets back a
    `[I18nResource.t()]` that already satisfies both guarantees by
    construction.
 
 5. **`I18n2Elm.Domain.Printer` (`lib/domain/printer.ex`)** — turns
    `I18nResource` structs into `{file_path, file_content}` pairs using EEx
    templates loaded from `priv/templates/` (`language.elm.eex`,
-   `ids.elm.eex`, `util.elm.eex`; the templates directory is configured via
-   `config :i18n2elm, templates_location:` in `config/config.exs`). Each
-   `translation_key` is prefixed `Tid` here (e.g. `"Hello"` → `"TidHello"`,
-   `format_id_with_arguments/2`) to build the Elm-facing translation ID.
-   Produces, per invocation:
-   - one `<Lang><Country>.elm` file per input language (e.g. `DaDk.elm`)
+   `ids.elm.eex`, `util.elm.eex`, `i18n_text.elm.eex`; the templates
+   directory is configured via `config :i18n2elm, templates_location:` in
+   `config/config.exs`). Each `translation_key` is prefixed `Tid` here
+   (e.g. `"Hello"` → `"TidHello"`, `format_id_with_arguments/2`) to build
+   the Elm-facing translation ID. Exposes two top-level aggregators, one
+   per `output_mode`, both taking the already-resolved `reference_translation`
+   as a plain `I18nResource.t()` argument rather than re-deriving it via
+   `Enum.find` — the caller, `I18n2Elm.print_i18n_modules/3` (point 1), is
+   the sole place that looks it up and handles a missing match, so
+   `Printer` itself returns a bare `[printed_file()]`, no
+   `{:ok, _} | {:error, _}`. `Domain.Parser.parse_translations/1` guarantees
+   the reference language is present and every file's keys match before
+   printing, so every helper below can assume both by construction.
+   - `print_native_modules/3` (`lib/domain/printer.ex:53`) — one
+     `<Lang><Country>.elm` file per input language (e.g. `DaDk.elm`)
      exposing a `<lang><Country>Translations : TranslationId -> String`
-     function (`print_translation_module/2`)
-   - one `Ids.elm` file with the shared `TranslationId` union type, derived
-     from the **reference i18n resource** (`I18nResource.reference?/1`,
-     currently `en_US`); `Domain.Parser.parse_translations/1` guarantees this
-     language is present and every file's keys match before printing, so
-     `print_ids_module/2` and `print_util_module/2` can assume both by
-     construction
-   - one `Util.elm` file with a `Language` union type, `parseLanguage`, and a
-     `translate` dispatcher across all languages (`print_util_module/2`)
+     function (`print_translation_module/2`), plus `Ids.elm` and `Util.elm`
+     (below).
+   - `print_web_component_modules/3` (`lib/domain/printer.ex:69`) —
+     `Ids.elm`, plus `I18nText.elm` (`print_i18n_text_module/2`,
+     `lib/domain/printer.ex:176`: a single `view : TranslationId -> Html
+     msg` dispatching every id to a generated `<i18n-text>` custom
+     element) and the `static/` runtime assets it depends on — one
+     reconstructed `<locale>.json` per language (`print_locale_json/1`,
+     `lib/domain/printer.ex:211`, turning `{:hole, n}` tokens back into
+     literal `"{n}"` text), `static/locales.json`
+     (`print_locales_manifest/1`, `lib/domain/printer.ex:235`), and the
+     hand-written `priv/web-component/i18n-text.js` embedded verbatim at
+     compile time via `@external_resource` (`print_web_component_script/0`,
+     `lib/domain/printer.ex:251`). All three live under the static asset
+     root (§Vocabulary in README.md; `create_static_asset_path/2`,
+     `lib/domain/printer.ex:258`) — `Util.elm`/`Language`/`parseLanguage`/
+     `translate` are **not** generated in this mode, since the web
+     component resolves the locale itself at runtime.
+   - `Ids.elm` (`print_ids_module/2`, `lib/domain/printer.ex:160`) and its
+     shared `TranslationId` union type, derived from the **reference i18n
+     resource** (`I18nResource.reference?/1`, currently `en_US`), are
+     identical in both modes.
 
-6. **`I18n2Elm.Domain.I18nResource` (`lib/domain/i18n_resource.ex`)** —
-   Defines `I18nResource` (via `TypedStruct`), the parser's output struct
-   (`locale` plus its list of `translation_pairs`), plus the shared
+6. **`I18n2Elm.Domain.Parser.I18nResource`
+   (`lib/domain/parser/i18n_resource.ex`)** — Defines `I18nResource` (via
+   `TypedStruct`), the parser's output struct (`locale` plus its list of
+   `translation_pairs`), plus the shared
    `translation_key`/`translation_pair`/`translation_token` types and
    `reference?/1`, which checks a resource's `locale` against
-   `Locale.reference/0`.
+   `Locale.reference/0`. Nested under `Parser` alongside
+   `I18n2Elm.Domain.Parser.Locale` (`lib/domain/parser/locale.ex`), the
+   `<language>_<COUNTRY>` identifier type both modules depend on.
 
-7. **`I18n2Elm.Domain.PrinterViews` (`lib/domain/printer_views.ex`)** —
-   Defines `LanguageView`, `IdsView`, and `UtilView` (each via
-   `TypedStruct`), the printer's three EEx template-input structs — one per
-   template under `priv/templates/`. `Domain.Printer` builds one of these as
-   an explicit intermediate step before feeding its fields positionally into
-   the corresponding `EEx.function_from_file`-generated template function,
-   rather than passing plain maps and lists inline.
+7. **`I18n2Elm.Domain.Printer.{LanguageView, IdsView, UtilView, I18nTextView}`
+   (`lib/domain/printer/language_view.ex`, `ids_view.ex`, `util_view.ex`,
+   `i18n_text_view.ex`)** — one standalone module per EEx template-input
+   struct (each via `TypedStruct`), one per template under
+   `priv/templates/`. `Domain.Printer` builds one of these as an explicit
+   intermediate step before feeding its fields
+   positionally into the corresponding `EEx.function_from_file`-generated
+   template function, rather than passing plain maps and lists inline.
+   `I18nTextView`'s `clauses` field is a list of `clause`-shaped maps
+   (`%{pattern, key, values_expr}`, one per `TranslationId` — a **clause**
+   of the generated `tidToKey`/`tidToValues` case expressions), following
+   `UtilView`'s existing precedent of a plain typed map over a nested
+   struct.
 
 8. **`I18n2Elm.Result` (`lib/result.ex`)** — `traverse/2`, a small shared,
    dependency-free helper for composing functions that return `{:ok, _} |
@@ -136,9 +190,11 @@ Data flows one direction only: JSON → raw `{filename, map}` pairs
 (`Infra.FileSystem`) → `I18nResource` structs (`Domain.Parser`) →
 `{file_path, content}` pairs (`Domain.Printer`) → disk
 (`Infra.FileSystem.write_file/2`), all wired together by
-`I18n2Elm.generate/2`. There is no Elm-side code in this repo; `examples/`
-holds a worked input-JSON/output-Elm pair used as a manual reference
-(mirrored in the README), not fixtures consumed by tests.
+`I18n2Elm.generate/3`. There is no Elm-side code in this repo (the
+`web-component` mode's `priv/web-component/i18n-text.js` is hand-written
+JS, not generated — see point 5); `examples/` holds worked input-JSON/output
+pairs for both output modes, used as a manual reference (mirrored in the
+README), not fixtures consumed by tests.
 
 Elm identifier/file naming (e.g. `da_DK` → module `DaDk`, function
 `daDkTranslations`, type constructor `DA_DK`) is derived purely from
@@ -184,12 +240,12 @@ These shape how code in this repo is written. They apply to every change.
   ```
 - **Declaration order is top-down.** If function A depends on function B,
   declare A above B — same for private helpers. See
-  `Printer.print_translation_module/2` (`lib/domain/printer.ex:64`), declared
-  before the private helpers it calls (`create_translation_pair/1`,
-  `lib/domain/printer.ex:99`).
+  `Printer.print_translation_module/2` in `lib/domain/printer.ex`, declared
+  before the private helpers it calls (`create_translation_pair/1`, same
+  file).
 - **Order parameters by relevance.** The value a function is fundamentally
   about leads; contextual criteria follow. `print_translation_module(translation,
-  module_name)` (`lib/domain/printer.ex:64`) leads with its subject and
+  module_name)` in `lib/domain/printer.ex` leads with its subject and
   trails with the injected naming context — mirror this order in new
   functions.
 - **Comments earn their place.** `@doc` on public functions describes *what*
@@ -200,41 +256,37 @@ These shape how code in this repo is written. They apply to every change.
   design idea that only lived in a past conversation; the reader can't see
   the ghost being refuted, so cut it.
 - **Every module opens with a `@moduledoc` naming its concern.** One to three
-  sentences is the norm (`lib/domain/parser.ex:2-4`,
-  `lib/domain/printer.ex:2-5`); expand to a longer doc with examples only
-  when the module has non-obvious usage, the way `lib/i18n2elm.ex:2-16`
-  documents CLI invocation. Writing the one-concern sentence doubles as a
-  cohesion test — if it's hard to write, the module is doing too much.
+  sentences is the norm (see `lib/domain/parser.ex` or `lib/domain/printer.ex`);
+  expand to a longer doc with examples only when the module has non-obvious
+  usage, the way `lib/i18n2elm.ex` documents CLI invocation. Writing the
+  one-concern sentence doubles as a cohesion test — if it's hard to write,
+  the module is doing too much.
 - **Every function gets a `@spec`, public or private.** See
   `lib/domain/printer.ex`, where specs exist even on private helpers like
-  `create_file_path/2` (`lib/domain/printer.ex:202`).
+  `create_file_path/3`.
 - **Every public function gets a `@doc`**, shaped per "Comments earn their
   place" above — coverage is mandatory, not just content. Even functions
   that feel like internal plumbing need one: `Printer.print_ids_module/2`
-  (`lib/domain/printer.ex:128-131`) carries a `@doc` alongside its more
-  obviously user-facing sibling `print_translation_module/2` (`:59-62`).
-  Add a usage example inside the `@doc` where it clarifies input/output
-  shape (`lib/domain/parser.ex:32-40`). Private helpers get a `@doc` only
-  when that same explaining bar is met; only trivial private pass-throughs
-  skip it entirely.
+  carries a `@doc` alongside its more obviously user-facing sibling
+  `print_translation_module/2`. Add a usage example inside the `@doc`
+  where it clarifies input/output shape (see `Parser.parse_translation/2`
+  in `lib/domain/parser.ex`). Private helpers get a `@doc` only when that
+  same explaining bar is met; only trivial private pass-throughs skip it
+  entirely.
 - **Prefer short functions.** ~50 LOC is the soft ceiling. Treat approaching
   it as a signal the function is doing several things — extract named helpers
   before adding more.
 - **Functional core, imperative shell.** `Domain` (`lib/domain/*.ex`:
-  `Parser`, `Printer`, `I18nResource`, `Locale`, `PrinterViews`) is the pure
-  core; `Infra` (`lib/infra/*.ex`: `CLI`, `FileSystem`) is the imperative
-  shell, the only place argv parsing and file I/O happen. `I18n2Elm`
-  (`lib/i18n2elm.ex`) is the thin entry point that wires the two together —
-  new cross-cutting logic goes here, never smuggled into either layer.
+  `Parser`, `Printer`, plus `Parser.{I18nResource, Locale}` and
+  `Printer.{LanguageView, IdsView, UtilView, I18nTextView}` nested under
+  each) is the pure core; `Infra` (`lib/infra/*.ex`: `CLI`, `FileSystem`) is
+  the imperative shell, the only place argv parsing and file I/O happen.
+  `I18n2Elm` wires the two together — see §Architecture point 1.
   - **Dependency direction is one-way and enforced by module, not just by
-    convention: `Infra` must never call `Domain`.** `Infra.FileSystem`
-    reads and JSON-decodes files but hands back raw `{filename, map}`
-    pairs rather than calling `Domain.Parser` itself — turning that map
-    into an `I18nResource` struct is `Domain.Parser.parse_translations/1`'s
-    job, invoked from `I18n2Elm.generate/2`, the only module allowed to
-    depend on both layers. `I18n2Elm.Result` (`lib/result.ex`, §Architecture
-    point 8) is the one exception, sitting outside both layers rather than
-    creating a cross-layer dependency.
+    convention: `Infra` must never call `Domain`.** See §Architecture
+    point 3 for how `Infra.FileSystem` upholds this. `I18n2Elm.Result`
+    (`lib/result.ex`, §Architecture point 8) is the one exception, sitting
+    outside both layers rather than creating a cross-layer dependency.
   - `Logger` is the one exception to "no side effects in the core": it's a
     cross-cutting singleton, callable directly via `require Logger` from any
     module without threading it through function signatures or counting
@@ -251,37 +303,35 @@ These shape how code in this repo is written. They apply to every change.
 - **Name your conditionals.** Two forms: extract a complex boolean
   expression (e.g. `a and b or (c and not d)`) into a named local variable
   before branching on it; extract a complex predicate into a named local
-  function. See `Printer.hole?/1` (`lib/domain/printer.ex:121-122`) for the
-  latter — a one-line predicate function used from `Enum.filter/2` instead
-  of an inline pattern-match expression.
-- **Name your pipelines.** A multi-step `|>` chain (3+ pipe operators, not
+  function. See `Printer.hole?/1` for the latter — a one-line predicate
+  function used from `Enum.filter/2` instead of an inline pattern-match
+  expression.
+- **Name your pipelines.** A multi-step `|>` chain (4+ pipe operators, not
   line count) embedded inside a function that also does something else (a
   `with`, an `if`, another computation) is a decomposition signal on its
   own. Two forms, same choice as "Name your conditionals": bind it to a
-  well-named local variable when it's shorter (2 steps) and just chains
+  well-named local variable when it's shorter (3 steps) and just chains
   already-named helpers; extract it into a named, separately-specced helper
-  at 3+ steps, or sooner if it implements real logic of its own (new
+  at 4+ steps, or sooner if it implements real logic of its own (new
   pattern matches, new predicates, a result worth a `@spec`). See
-  `Parser.tokenize/2`
-  (`lib/domain/parser.ex:68-73`, pulled out of `parse_value/1`) and
-  `Parser.extract_hole_numbers/1` (`lib/domain/parser.ex:117-122`, pulled out
-  of `validate_hole_numbering/2`) for the extraction form; the local-variable
-  form is already in use at `reference_keys` in
-  `Parser.validate_matching_key_sets/1` (`lib/domain/parser.ex:137-140`).
+  `Parser.tokenize/2` (pulled out of `parse_value/1`) and
+  `Parser.extract_hole_numbers/1` (pulled out of `validate_hole_numbering/2`)
+  for the extraction form; the local-variable form is already in use at
+  `reference_keys` in `Parser.validate_matching_key_sets/1`.
 - **Always use multi-line `if/do/else/end`.** Never the `if cond, do: x, else:
   y` keyword-list form for anything beyond a trivial single expression — it
   keeps conditionals easy to extend and diff.
 - **Destructure instead of repeating a path.** When a struct field is
   accessed more than twice in a function, destructure it in the function
   head rather than repeating `thing.field`. See `create_file_name/1` and
-  `create_translation_name/1` (`lib/domain/printer.ex:214`, `:219`):
+  `create_translation_name/1` in `lib/domain/printer.ex`:
   `def create_file_name(%I18nResource{locale: %Locale{language: language,
   country: country}})` instead of reaching into `translation.locale.language`
   repeatedly.
 - **Validate only at boundaries.** Trust internal callers. Validate at I/O
-  edges — `I18n2Elm.Infra.CLI.parse_args/1`'s argument validation
-  (`lib/infra/cli.ex:11-23`) is the existing example; don't re-check an
-  input already validated at a boundary deeper in the call chain.
+  edges — `I18n2Elm.Infra.CLI.parse_args/1`'s argument validation is the
+  existing example; don't re-check an input already validated at a
+  boundary deeper in the call chain.
 - **Don't abstract until the second use.** Three similar lines is better than
   a premature abstraction. Delete duplication when it appears the second
   time, not in anticipation.
@@ -302,17 +352,14 @@ These shape how code in this repo is written. They apply to every change.
     programmer-error conditions.
   - `I18n2Elm.main/1` is the dispatcher: it unwraps the top-level `with`
     chain and, on `{:error, reason}`, prints a message and calls `exit/1` —
-    extending the pattern already used for CLI-argument errors
-    (`lib/i18n2elm.ex:32-54`) to file/parse errors too.
+    extending the pattern already used for CLI-argument errors to
+    file/parse errors too.
   - Don't assume an upstream caller already validated the input — a
     function reachable on its own (a sibling caller, a unit test) must
     handle its own bad-input case at the point it can fail, not trust that
-    validation happened elsewhere. Two crashes slipped in this way:
-    `Enum.find/2` returning `nil` and being dereferenced unchecked in
-    `Printer.print_elm_i18n_modules/2`, and `Integer.parse/1` raising via a
-    bare `elem/2` on a non-numeric hole placeholder in
-    `Parser.tokenize_segment/2` — both now return `{:error, _}` at the exact
-    call site (`lib/domain/printer.ex:46-49`, `lib/domain/parser.ex:84-88`).
+    validation happened elsewhere. `Parser.tokenize_segment/2` follows
+    this: a non-numeric hole placeholder returns `{:error, _}` at the exact
+    call site instead of crashing via a bare `elem/2` on `Integer.parse/1`.
 
 ## Feature workflow
 
@@ -412,23 +459,24 @@ test "should parse a translation value with two holes" do
   {"Hello": "Hej, {0}. Leder du efter {1}?"}
   """
 
-  # When parsing it for the da_DK language tag
-  parsed = json |> Jason.decode!() |> Parser.parse_translation("da_DK")
+  # When parsing it for the da_DK locale
+  {:ok, parsed} = json |> Jason.decode!() |> Parser.parse_translation("da_DK")
 
-  # Then the value is split into tagged text/hole tuples in order
-  assert parsed == %Translation{
-           language_tag: "da_DK",
-           translations: [
-             {"TidHello", [{:hole, "Hej, ", 0}, {:hole, ". Leder du efter ", 1}, {:text, "?"}]}
+  # Then the value is split into tagged text/hole tokens in order, key unprefixed
+  assert parsed == %I18nResource{
+           locale: %Locale{language: "da", country: "DK"},
+           translation_pairs: [
+             {"Hello",
+              [{:text, "Hej, "}, {:hole, 0}, {:text, ". Leder du efter "}, {:hole, 1}, {:text, "?"}]}
            ]
          }
 end
 ```
 
-Usage examples inside `@doc` blocks (`lib/domain/parser.ex:32-40`) document
+Usage examples inside `@doc` blocks (`lib/domain/parser.ex:31-39`) document
 behavior as plain input/output pairs and don't take Given/When/Then
 comments. Most aren't wired up as executable `doctest`s — `Locale.parse/1`
-(`lib/domain/locale.ex:23-30`, wired via `doctest Locale` in
+(`lib/domain/parser/locale.ex:23-30`, wired via `doctest Locale` in
 `test/domain/locale_test.exs:6`) is the one exception today. Whether or not
 a given example is made executable (an `iex>` prompt plus a `doctest
 ModuleName` call), it follows this same plain-example shape, not
@@ -440,10 +488,10 @@ convention, unwrap by pattern-matching — `assert {:ok, value} = result` then
 assert on `value`, or `assert {:error, reason} = result` then assert on
 `reason`.
 
-**Orchestrator/integration coverage.** Cover `I18n2Elm.generate/2` (the
+**Orchestrator/integration coverage.** Cover `I18n2Elm.generate/3` (the
 orchestrator) via `test/e2e_test.exs`, against real temporary directories
 rather than mocked adapters. Register cleanup for those directories via
-`setup`'s `on_exit` (`test/e2e_test.exs:17-19`, `test/i18n2elm_test.exs:17-19`),
+`setup`'s `on_exit` (`test/e2e_test.exs:17-20`, `test/i18n2elm_test.exs:19-22`),
 not a manual `File.rm_rf!` at the bottom of the test body — an assertion
 failure earlier in the test skips a trailing cleanup call and leaks the
 directory, while `on_exit` runs regardless of outcome.
@@ -474,23 +522,31 @@ directory, while `on_exit` runs regardless of outcome.
 
 - **`Logger` (via `require Logger`) is for diagnostics; `IO.puts` is for
   CLI-user-facing text; `IO.binwrite` is for writing generated file
-  contents.** See the split in `lib/i18n2elm.ex` (`Logger` + `IO.puts`) and
+  contents.** This includes the terminal output of `main/1`'s `with`/`else`
+  error branches (`lib/i18n2elm.ex:46-66`), written via `IO.puts(:stderr,
+  ...)` — that output is the CLI's answer to the person who ran it, not a
+  diagnostic for an observability backend, so it's never logged via
+  `Logger`. See the split in `lib/i18n2elm.ex` (`Logger.debug` for
+  diagnostics, `IO.puts`/`IO.puts(:stderr, ...)` for user-facing output) and
   `lib/infra/file_system.ex` (`Logger` + `IO.binwrite`), and keep new code
   on the same sides of that line.
 - **Level assignment:** `debug` for argument/output dumps
-  (`lib/i18n2elm.ex:30,36`) and file-list dumps
+  (`lib/i18n2elm.ex:37,44`) and file-list dumps
   (`lib/infra/file_system.ex:27`); `info` for milestones ("Created file:
-  ...", `lib/infra/file_system.ex:91`); `warning` for an anomaly the run
+  ...", `lib/infra/file_system.ex:96`); `warning` for an anomaly the run
   survives, e.g. a non-`.json` file encountered while walking an input
   directory (logged and skipped by `expand_path/1`,
-  `lib/infra/file_system.ex:46-62`); `error` logged once at the dispatcher
-  (`main/1`'s `with`/`else`, `lib/i18n2elm.ex:32-54`) immediately before
-  `exit` — a malformed or unreadable input file is a hard stop under the
+  `lib/infra/file_system.ex:46-62`). There is no `error` level in this
+  codebase: a malformed or unreadable input file is a hard stop under the
   `{:ok, _} | {:error, _}` convention, not a per-file skip, since every
-  input file must share identical keys for the output to be valid.
+  input file must share identical keys for the output to be valid — but
+  per the split above, that stop's message is `IO.puts(:stderr, ...)`
+  output at the dispatcher (`main/1`'s `with`/`else`,
+  `lib/i18n2elm.ex:39-67`), not a logged one.
 - **Message shape:**
 
   ```elixir
   Logger.debug("Arguments: #{inspect(args)}")
   Logger.info("Created file: #{file_path}")
+  IO.puts(:stderr, "Could not find any JSON files in path: #{inspect(paths)}")
   ```

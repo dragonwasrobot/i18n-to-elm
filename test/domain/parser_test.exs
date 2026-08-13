@@ -1,9 +1,8 @@
 defmodule I18n2ElmTest.Parser do
   use ExUnit.Case, async: true
 
-  alias I18n2Elm.Domain.I18nResource
-  alias I18n2Elm.Domain.Locale
   alias I18n2Elm.Domain.Parser
+  alias Parser.{I18nResource, Locale}
 
   test "should parse a translation map into a translation struct" do
     # Given a translation map with plain values and one holed value
